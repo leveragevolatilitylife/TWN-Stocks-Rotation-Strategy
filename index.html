@@ -98,19 +98,6 @@ header.top p.sub{margin:0;color:var(--muted);font-size:13px;}
   text-align:right;font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;font-size:13px;color:var(--muted);
 }
 .asof b{color:var(--text);font-size:15px;display:block;font-weight:600;}
-.upload-row{display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap;}
-.upload-btn{
-  position:relative;overflow:hidden;display:inline-block;cursor:pointer;
-  background:var(--panel-2);border:1px solid var(--muted-2);color:var(--text);
-  font-size:12.5px;padding:8px 14px;border-radius:3px;
-}
-.upload-btn:hover{border-color:var(--amber);color:var(--amber);}
-.upload-btn input[type=file]{
-  position:absolute;left:0;top:0;width:100%;height:100%;opacity:0;cursor:pointer;
-}
-.upload-status{font-size:12px;color:var(--muted);font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;}
-.upload-status.error{color:var(--red);}
-.upload-status.ok{color:var(--green);}
 
 section{margin-bottom:44px;}
 h2.section-title{
@@ -278,13 +265,6 @@ footer p{margin:4px 0;}
       資料最新日期
     </div>
   </div>
-  <div class="upload-row">
-    <label class="upload-btn">
-      本機預覽 Excel（不影響其他訪客）
-      <input type="file" id="xlsx-upload" accept=".xlsx" />
-    </label>
-    <span id="upload-status" class="upload-status"></span>
-  </div>
 </header>
 
 <section id="sec-snapshot">
@@ -388,7 +368,6 @@ footer p{margin:4px 0;}
 </section>
 
 <footer>
-  <p>此網頁的資料來源是同一個 GitHub repo 內的 <code>data/latest.xlsx</code>：每天要更新時，把最新的「台股波動率輪換策略」Excel 檔案取代掉 <code>data/latest.xlsx</code>（維持相同檔名）並上傳/推送到 repo，所有訪客下次打開網頁都會自動看到最新資料（GitHub Pages 的快取通常幾分鐘內會更新）。右上角「本機預覽 Excel」則是只有你自己看得到的暫時預覽，不會影響其他訪客看到的內容。</p>
   <p>本頁面內容僅為個人資料整理與追蹤工具，非投資建議。頁面產生時間：<span id="gen-time"></span></p>
 </footer>
 
@@ -1159,32 +1138,6 @@ const DATA_URL = 'data/latest.xlsx';
     }
   }
 })();
-
-/* ---------- manual Excel upload: local-only preview, does not affect
-   what other visitors see (that's controlled by data/latest.xlsx in the repo) ---------- */
-const uploadInput = document.getElementById('xlsx-upload');
-const uploadStatus = document.getElementById('upload-status');
-if(uploadInput){
-  uploadInput.addEventListener('change', async (e)=>{
-    const file = e.target.files[0];
-    if(!file) return;
-    uploadStatus.className = 'upload-status';
-    uploadStatus.textContent = '讀取中…';
-    try{
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, {type:'array', cellDates:true});
-      const newData = parseWorkbook(wb);
-      renderDashboard(newData);
-      uploadStatus.className = 'upload-status ok';
-      uploadStatus.textContent = '本機預覽已更新至 ' + newData.rows[0].date + '（' + new Date().toLocaleTimeString('zh-TW') + '，僅您看得到）';
-    } catch(err){
-      console.error(err);
-      uploadStatus.className = 'upload-status error';
-      uploadStatus.textContent = '讀取失敗：' + err.message;
-    }
-    uploadInput.value = '';
-  });
-}
 
 })();
 
