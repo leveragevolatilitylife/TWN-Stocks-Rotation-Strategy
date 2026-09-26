@@ -266,19 +266,48 @@ footer p{margin:4px 0;}
     </div>
     <div class="asof">
       <b id="asof-date">–</b>
-      資料最新日期
+      資料最新日期(美股收盤日期)
     </div>
   </div>
 </header>
 
 <section id="sec-strategy">
-  <h2 class="section-title">策略訊號（次一交易日建議持倉）</h2>
+  <h2 class="section-title">策略訊號（當天台股建議持倉）</h2>
   <div class="strat-grid" id="strat-grid"></div>
+</section> 
+     
+<section id="sec-strategy-logic">
+  <h2 class="section-title">策略邏輯說明</h2>
+  <div class="logic-row logic-row-2">
+    <div class="logic-card">
+      <div class="name">MARS+VRS Hybrid II</div>
+      <div class="desc">結合「MA Rotation II」與「VIX Rotation+BTD」兩組訊號，只要<b>任一組</b>訊號顯示 00631L 就持有 00631L（<b>OR</b> 條件），兩組訊號都轉為防禦時才持有 00635U。訊號較積極，00631L持倉比例較高，平均交易頻率~24天/次。</div>
+    </div>
+    <div class="logic-card">
+      <div class="name">MARS+VRS Hybrid</div>
+      <div class="desc">同樣結合「MA Rotation II」與「VIX Rotation+BTD」，但採<b>共識制</b>：兩組訊號一致時才換倉；若兩者不同調，則沿用前一交易日的持倉不變 (<b>HOLD</b> 條件)。訊號較有延續性，平均交易頻率~58天/次。</div>
+    </div>
+  </div>
+  <div class="logic-row logic-row-3">
+    <div class="logic-card">
+      <div class="name">VIX Rotation+BTD (R4Y28_4Y.5)</div>
+      <div class="desc">以<b>前一交易日</b> 以波動率指標 VX30:VIX Roll Yield 在近 1000 個交易日（約4年）滾動分布中的百分位排名進行擇時：高於PR28、或低於PR0.5（極端恐慌低點，逢低承接Buy The Dip）時，隔日持有 00631L；其餘情況持有 00635U。平均交易頻率~16天/次。</div>
+    </div>
+    <div class="logic-card">
+      <div class="name">MA Rotation (0050 60MA+BIAS)</div>
+      <div class="desc">以<b>前一交易日0050 收盤價</b> 與其季線（過去 60 個交易日<b>收盤均價</b>）比較：收盤價高於季線且乖離率 &lt;20% 時持有 00631L；其餘情況持有 00635U。平均交易頻率~24天/次。</div>
+    </div>
+    <div class="logic-card">
+      <div class="name">MA Rotation II (0050 60MA+BIAS)</div>
+      <div class="desc">以<b>當日0050 開盤價</b>與其季線（<b>當日開盤價＋過去 59 個交易日收盤價組成</b>）比較：開盤價高於季線、且乖離率 &lt;20% 時持有 00631L；其餘情況持有 00635U。平均交易頻率~27天/次。</div>
+    </div>
+  </div>
+  <p class="backtest-note">回測結果請見<a href="https://leveragevolatilitylife.github.io/TWN-rotation-strategy-backtester/" target="_blank" rel="noopener">台股輪動策略回測工作台</a>。</p>    
 </section>
 
 <section id="sec-snapshot">
   <h2 class="section-title">
-    今日快照 <span class="hint" id="snapshot-hint"></span>
+    前一晚美股收盤數據 <span class="hint" id="snapshot-hint"></span>
     <span class="timeline-legend" style="margin-left:auto;">
       <span><i class="dot" style="background:var(--green)"></i>低度風險</span>
       <span><i class="dot" style="background:var(--amber)"></i>中度風險</span>
@@ -345,35 +374,6 @@ footer p{margin:4px 0;}
       </div>
     </div>
   </div>
-</section>
-
-<section id="sec-strategy-logic">
-  <h2 class="section-title">策略邏輯說明</h2>
-  <div class="logic-row logic-row-2">
-    <div class="logic-card">
-      <div class="name">MARS+VRS Hybrid II</div>
-      <div class="desc">結合「MA Rotation II」與「VIX Rotation+BTD」兩組訊號，只要<b>任一組</b>訊號顯示 00631L 就持有 00631L（<b>OR</b> 條件），兩組訊號都轉為防禦時才持有 00635U。訊號較積極，00631L持倉比例較高，平均交易頻率~24天/次。</div>
-    </div>
-    <div class="logic-card">
-      <div class="name">MARS+VRS Hybrid</div>
-      <div class="desc">同樣結合「MA Rotation II」與「VIX Rotation+BTD」，但採<b>共識制</b>：兩組訊號一致時才換倉；若兩者不同調，則沿用前一交易日的持倉不變 (<b>HOLD</b> 條件)。訊號較有延續性，平均交易頻率~58天/次。</div>
-    </div>
-  </div>
-  <div class="logic-row logic-row-3">
-    <div class="logic-card">
-      <div class="name">VIX Rotation+BTD (R4Y28_4Y.5)</div>
-      <div class="desc">以<b>前一交易日</b> 以波動率指標 VX30:VIX Roll Yield 在近 1000 個交易日（約4年）滾動分布中的百分位排名進行擇時：高於PR28、或低於PR0.5（極端恐慌低點，逢低承接Buy The Dip）時，隔日持有 00631L；其餘情況持有 00635U。平均交易頻率~16天/次。</div>
-    </div>
-    <div class="logic-card">
-      <div class="name">MA Rotation (0050 60MA+BIAS)</div>
-      <div class="desc">以<b>前一交易日0050 收盤價</b> 與其季線（過去 60 個交易日<b>收盤均價</b>）比較：收盤價高於季線且乖離率 &lt;20% 時持有 00631L；其餘情況持有 00635U。平均交易頻率~24天/次。</div>
-    </div>
-    <div class="logic-card">
-      <div class="name">MA Rotation II (0050 60MA+BIAS)</div>
-      <div class="desc">以<b>當日0050 開盤價</b>與其季線（<b>當日開盤價＋過去 59 個交易日收盤價組成</b>）比較：開盤價高於季線、且乖離率 &lt;20% 時持有 00631L；其餘情況持有 00635U。平均交易頻率~27天/次。</div>
-    </div>
-  </div>
-  <p class="backtest-note">回測結果請見<a href="https://leveragevolatilitylife.github.io/TWN-rotation-strategy-backtester/" target="_blank" rel="noopener">台股輪動策略回測工作台</a>。</p>
 </section>
 
 <section id="sec-table">
