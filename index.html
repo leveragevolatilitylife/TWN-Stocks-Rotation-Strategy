@@ -13,8 +13,8 @@
 
 <!-- Web Manifest & 行動裝置主題色彩設定 -->
 <link rel="manifest" href="site.webmanifest">
-<meta name="theme-color" content="#0a0e14">     
-     
+<meta name="theme-color" content="#0a0e14">  
+
 <!-- Loaded from jsDelivr (npm mirror) rather than bundled inline: this is a
      hosted, always-online GitHub Pages site, so letting the browser cache
      these ~700KB of library code separately (and share that cache across
@@ -67,6 +67,12 @@ header.top .row{
 header.top h1{
   font-size:22px;font-weight:700;margin:0 0 4px;letter-spacing:0.2px;
 }
+.version-badge{
+  display:inline-block;vertical-align:middle;margin-left:8px;
+  font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;
+  font-size:11px;font-weight:600;color:var(--amber);border:1px solid var(--amber);
+  border-radius:3px;padding:2px 6px;letter-spacing:0.5px;
+}
 header.top p.sub{margin:0;color:var(--muted);font-size:13px;}
 .asof{
   text-align:right;font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;font-size:13px;color:var(--muted);
@@ -116,6 +122,28 @@ h2.section-title span.hint{font-weight:400;font-size:12px;color:var(--muted-2);}
 .strat-card .ticker.on{color:var(--green);}
 .strat-card .ticker.off{color:var(--amber);}
 .strat-card .streak{font-size:11px;color:var(--muted-2);margin-top:6px;font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;}
+
+/* ---- strategy logic explainer cards ---- */
+.logic-row{display:grid;gap:10px;margin-bottom:10px;}
+.logic-row:last-child{margin-bottom:0;}
+.logic-row-2{grid-template-columns:repeat(2,1fr);}
+.logic-row-3{grid-template-columns:repeat(3,1fr);}
+.logic-card{
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px 15px;position:relative;overflow:hidden;
+  transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.logic-card:hover{
+  transform:translateY(-3px);
+  border-color:var(--muted-2);
+  box-shadow:0 10px 24px rgba(0,0,0,.35);
+}
+.logic-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--blue);}
+.logic-card .name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;}
+.logic-card .desc{font-size:12px;color:var(--muted);line-height:1.7;}
+.logic-card .desc b{color:var(--text);font-weight:600;}
+.backtest-note{font-size:12px;color:var(--muted);margin-top:14px;}
+.backtest-note a{color:var(--blue);}
 
 /* ---- charts ---- */
 .chart-box{
@@ -217,11 +245,13 @@ footer p{margin:4px 0;}
 
 @media (max-width:900px){
   .metric-grid{grid-template-columns:repeat(3,1fr);}
+  .logic-row-3{grid-template-columns:repeat(2,1fr);}
 }
 @media (max-width:640px){
   header.top .row{flex-direction:column;align-items:flex-start;}
   .asof{text-align:left;}
   .metric-grid{grid-template-columns:repeat(2,1fr);}
+  .logic-row-2, .logic-row-3{grid-template-columns:1fr;}
 }
 </style>
 </head>
@@ -231,24 +261,24 @@ footer p{margin:4px 0;}
 <header class="top">
   <div class="row">
     <div>
-      <h1>台股波動率輪換策略儀表板</h1>
+      <h1>台股波動率輪換策略儀表板 <span class="version-badge">v2</span></h1>
       <p class="sub">VIX 期貨與現貨指標 · 5 組策略訊號 · 2004 年至今每日資料</p>
     </div>
     <div class="asof">
       <b id="asof-date">–</b>
-      資料最新日期(美股收盤日期)
+      資料最新日期
     </div>
   </div>
 </header>
 
 <section id="sec-strategy">
-  <h2 class="section-title">策略訊號（當日台股建議持倉）</h2>
+  <h2 class="section-title">策略訊號（次一交易日建議持倉）</h2>
   <div class="strat-grid" id="strat-grid"></div>
 </section>
 
 <section id="sec-snapshot">
   <h2 class="section-title">
-    前一晚美股盤後數據 <span class="hint" id="snapshot-hint"></span>
+    今日快照 <span class="hint" id="snapshot-hint"></span>
     <span class="timeline-legend" style="margin-left:auto;">
       <span><i class="dot" style="background:var(--green)"></i>低度風險</span>
       <span><i class="dot" style="background:var(--amber)"></i>中度風險</span>
@@ -315,6 +345,35 @@ footer p{margin:4px 0;}
       </div>
     </div>
   </div>
+</section>
+
+<section id="sec-strategy-logic">
+  <h2 class="section-title">策略邏輯說明</h2>
+  <div class="logic-row logic-row-2">
+    <div class="logic-card">
+      <div class="name">MARS+VRS Hybrid II</div>
+      <div class="desc">結合「MA Rotation II」與「VIX Rotation+BTD」兩組訊號，只要<b>任一組</b>訊號顯示 00631L 就持有 00631L（<b>OR</b> 條件），兩組訊號都轉為防禦時才持有 00635U。訊號較積極，00631L持倉比例較高，平均交易頻率~24天/次。</div>
+    </div>
+    <div class="logic-card">
+      <div class="name">MARS+VRS Hybrid</div>
+      <div class="desc">同樣結合「MA Rotation II」與「VIX Rotation+BTD」，但採<b>共識制</b>：兩組訊號一致時才換倉；若兩者不同調，則沿用前一交易日的持倉不變 (<b>HOLD</b> 條件)。訊號較有延續性，平均交易頻率~58天/次。</div>
+    </div>
+  </div>
+  <div class="logic-row logic-row-3">
+    <div class="logic-card">
+      <div class="name">VIX Rotation+BTD (R4Y28_4Y.5)</div>
+      <div class="desc">以<b>前一交易日</b> 以波動率指標 VX30:VIX Roll Yield 在近 1000 個交易日（約4年）滾動分布中的百分位排名進行擇時：高於PR28、或低於PR0.5（極端恐慌低點，逢低承接Buy The Dip）時，隔日持有 00631L；其餘情況持有 00635U。平均交易頻率~16天/次。</div>
+    </div>
+    <div class="logic-card">
+      <div class="name">MA Rotation (0050 60MA+BIAS)</div>
+      <div class="desc">以<b>前一交易日0050 收盤價</b> 與其季線（過去 60 個交易日<b>收盤均價</b>）比較：收盤價高於季線且乖離率 &lt;20% 時持有 00631L；其餘情況持有 00635U。平均交易頻率~24天/次。</div>
+    </div>
+    <div class="logic-card">
+      <div class="name">MA Rotation II (0050 60MA+BIAS)</div>
+      <div class="desc">以<b>當日0050 開盤價</b>與其季線（<b>當日開盤價＋過去 59 個交易日收盤價組成</b>）比較：開盤價高於季線、且乖離率 &lt;20% 時持有 00631L；其餘情況持有 00635U。平均交易頻率~27天/次。</div>
+    </div>
+  </div>
+  <p class="backtest-note">回測結果請見<a href="https://leveragevolatilitylife.github.io/TWN-rotation-strategy-backtester/" target="_blank" rel="noopener">台股輪動策略回測工作台</a>。</p>
 </section>
 
 <section id="sec-table">
