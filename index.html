@@ -272,7 +272,9 @@ footer p{margin:4px 0;}
 </header>
 
 <section id="sec-strategy">
-  <h2 class="section-title">策略訊號（當天台股建議持倉）</h2>
+  <h2 class="section-title">
+       策略訊號（<span class="hint" id="strategy-date"></span>當天台股建議持倉）
+  </h2>
   <div class="strat-grid" id="strat-grid"></div>
 </section> 
      
@@ -481,6 +483,15 @@ function extractFromAOA(aoa){
     return `${y}-${m}-${day}`;
   }
 
+// 讀取 AZ5 儲存格 (Row 5, Col 52)
+  const az5Val = cell(5, 52);
+  let strategy_date = null;
+  if(az5Val instanceof Date){
+    strategy_date = fmtDate(az5Val);
+  } else if(typeof az5Val === 'string'){
+    strategy_date = az5Val.trim().slice(0, 10);
+  }
+     
   const rankKeys = ['vix9d','vix','vix3m','vix6m','vix1y','cash_vix_osc','_gap1','vix9d_vix','vix_vix3m','vix_vix6m','vix_vix1y','m1m2_futures','m4m7_futures','adjust_m1m2_futures','_gap2','roll_yield_m1_vix','roll_yield_vx30_vix'];
   function readRankRow(r){
     return {
@@ -517,6 +528,7 @@ function extractFromAOA(aoa){
   return {
     generated_at: new Date().toISOString(),
     strategy_names: STRAT_COLS.map(s=>s[2]),
+    strategy_date: strategy_date || (rows[0] ? rows[0].date : null), // 記錄 AZ5 日期
     current_rank, ltm, rows,
   };
 }
@@ -554,7 +566,13 @@ function renderDashboard(DATA){
   document.getElementById('asof-date').textContent = latest.date;
   document.getElementById('gen-time').textContent = new Date(DATA.generated_at).toLocaleString('zh-TW');
   document.getElementById('snapshot-hint').textContent = prev ? '較前一交易日 ' + prev.date : '';
-
+  
+  // 將 Excel 中 AZ5 儲存格讀取出的日期寫入策略訊號標題
+  const stratDateEl = document.getElementById('strategy-date');
+  if(stratDateEl && DATA.strategy_date){
+    stratDateEl.textContent = DATA.strategy_date;
+  }
+     
   /* ---------- snapshot metric cards ---------- */
   const METRICS = [
     {key:'roll_yield_vx30_vix', label:'VX30:VIX Roll Yield', type:'pct', d:2, bias:'higher'},
