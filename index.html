@@ -273,7 +273,7 @@ footer p{margin:4px 0;}
 
 <section id="sec-strategy">
   <h2 class="section-title">
-       策略訊號（<span class="hint" id="strategy-date"></span>當天台股建議持倉）
+       策略訊號（<span id="strat-date-inline"></span>當天台股建議持倉）
   </h2>
   <div class="strat-grid" id="strat-grid"></div>
 </section> 
@@ -567,10 +567,12 @@ function renderDashboard(DATA){
   document.getElementById('gen-time').textContent = new Date(DATA.generated_at).toLocaleString('zh-TW');
   document.getElementById('snapshot-hint').textContent = prev ? '較前一交易日 ' + prev.date : '';
   
-  // 將 Excel 中 AZ5 儲存格讀取出的日期寫入策略訊號標題
-  const stratDateEl = document.getElementById('strategy-date');
-  if(stratDateEl && DATA.strategy_date){
-    stratDateEl.textContent = DATA.strategy_date;
+ // 動態寫入加粗的 AZ5 日期
+  const dateEl = document.getElementById('strat-date-inline');
+  if(dateEl){
+    const dateStr = DATA.strategy_date || '';
+    // 使用 <b> 標籤並加上高亮顏色
+    dateEl.innerHTML = dateStr ? `<b style="font-weight:700; color:var(--text); margin-right:2px;">${dateStr}</b>` : '';
   }
      
   /* ---------- snapshot metric cards ---------- */
