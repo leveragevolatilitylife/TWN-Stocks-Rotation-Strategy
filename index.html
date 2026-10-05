@@ -273,7 +273,7 @@ footer p{margin:4px 0;}
 
 <section id="sec-strategy">
   <h2 class="section-title">
-       策略訊號（<span id="strat-date-inline"></span>當天台股建議持倉）
+       <span>策略訊號（<span id="strat-date-inline"></span>當天台股建議持倉）</span>
   </h2>
   <div class="strat-grid" id="strat-grid"></div>
 </section> 
@@ -572,7 +572,7 @@ function renderDashboard(DATA){
   if(dateEl){
     const dateStr = DATA.strategy_date || '';
     // 使用 <b> 標籤並加上高亮顏色
-    dateEl.innerHTML = dateStr ? `<b style="font-weight:700; color:var(--text); margin-right:2px;">${dateStr}</b>` : '';
+    dateEl.innerHTML = dateStr ? `<b style="font-weight:700; color:var(--text);">${dateStr}</b>` : '';
   }
      
   /* ---------- snapshot metric cards ---------- */
