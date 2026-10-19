@@ -1,0 +1,88 @@
+# 每日自動更新 data/latest.xlsx（台北時間週一至週五）
+#   08:35  close：新增前一個美股交易日的 VIX 期貨 / Cboe 指數 / 0050 前日收盤，並重算
+#   09:05  open ：填入 0050 當日開盤價，並重算
+# 安全機制：寫入前有範圍檢查；公式出現錯誤或數字異常就中止（網站維持前一天的樣子，Actions 會顯示失敗）。
+# DRY_RUN 為 true 時只把結果推到 dryrun-results 分支，不動 main（第一階段並行驗證用）。
+# 手動停用：Actions 頁面 → daily-update → Disable workflow。
+name: daily-update
+on:
+  schedule:
+    - cron: '35 0 * * 1-5'   # 08:35 Asia/Taipei
+    - cron: '5 1 * * 1-5'    # 09:05 Asia/Taipei
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'close / open / selftest'
+        default: 'close'
+      today:
+        description: '覆寫「今天」(YYYY-MM-DD，留空=台北今天)'
+        default: ''
+      dry_run:
+        description: '只推 dryrun-results 分支，不動 main'
+        default: 'true'
+permissions:
+  contents: write
+concurrency:
+  group: data-update
+  cancel-in-progress: false
+env:
+  # 排程執行時使用的預設值；確認並行驗證沒問題後改成 'false'
+  SCHEDULE_DRY_RUN: 'true'
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install openpyxl
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libreoffice-calc
+      - name: decide mode
+        id: cfg
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ inputs.mode }}" >> $GITHUB_OUTPUT
+            echo "today=${{ inputs.today }}" >> $GITHUB_OUTPUT
+            echo "dry=${{ inputs.dry_run }}" >> $GITHUB_OUTPUT
+          else
+            case "${{ github.event.schedule }}" in
+              '35 0 * * 1-5') echo "mode=close" >> $GITHUB_OUTPUT ;;
+              *) echo "mode=open" >> $GITHUB_OUTPUT ;;
+            esac
+            echo "today=" >> $GITHUB_OUTPUT
+            echo "dry=${SCHEDULE_DRY_RUN}" >> $GITHUB_OUTPUT
+          fi
+      - name: run update
+        id: run
+        run: |
+          set -u
+          MODE='${{ steps.cfg.outputs.mode }}'; TODAY='${{ steps.cfg.outputs.today }}'; DRY='${{ steps.cfg.outputs.dry }}'
+          ARGS=""; [ -n "$TODAY" ] && ARGS="--today $TODAY"
+          FILE=data/latest.xlsx
+          if [ "$MODE" = "selftest" ]; then python3 scripts/daily_update.py selftest $ARGS; exit $?; fi
+          if [ "$DRY" = "true" ]; then
+            FILE=/tmp/work.xlsx
+            if [ "$MODE" = "open" ] && git fetch -q origin dryrun-results 2>/dev/null; then
+              git show origin/dryrun-results:data/latest.xlsx > $FILE
+            else
+              cp data/latest.xlsx $FILE
+            fi
+          fi
+          set +e
+          python3 scripts/daily_update.py "$MODE" $ARGS --file "$FILE"; RC=$?
+          set -e
+          echo "rc=$RC" >> $GITHUB_OUTPUT
+          if [ $RC -eq 10 ]; then echo "nothing to do"; exit 0; fi
+          [ $RC -eq 0 ] || exit $RC
+          git config user.name github-actions; git config user.email actions@github.com
+          if [ "$DRY" = "true" ]; then
+            git checkout -q -b dry; cp $FILE data/latest.xlsx
+            git add data/latest.xlsx && git commit -q -m "dry-run $MODE $(date -u +%F\ %H:%M)"
+            git push -q --force origin dry:refs/heads/dryrun-results
+          else
+            test "$(git status --porcelain)" = " M data/latest.xlsx" || { echo "unexpected changes:"; git status --porcelain; exit 1; }
+            git add data/latest.xlsx
+            git commit -q -m "更新每日資料 ($MODE $(TZ=Asia/Taipei date +%F))"
+            for i in 1 2 3; do git push -q origin HEAD:main && break || { sleep 5; git fetch -q origin main; git reset -q --hard origin/main; python3 scripts/daily_update.py "$MODE" $ARGS --file "$FILE" || exit $?; git add data/latest.xlsx; git commit -q -m "更新每日資料 ($MODE)"; }; done
+          fi
