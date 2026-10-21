@@ -78,6 +78,7 @@ jobs:
         if: steps.plan.outputs.need == 'true'
         run: |
           set -u
+          exec > >(tee /tmp/run.log) 2>&1
           MODE='${{ steps.cfg.outputs.mode }}'; TODAY='${{ steps.cfg.outputs.today }}'; DRY='${{ steps.cfg.outputs.dry }}'
           ARGS=""; [ -n "$TODAY" ] && ARGS="--today $TODAY"
           FILE=data/latest.xlsx
@@ -114,3 +115,16 @@ jobs:
             git commit -q -m "更新每日資料 ($MODE $(TZ=Asia/Taipei date +%F))"
             for i in 1 2 3; do git push -q origin HEAD:main && break || { sleep 5; git fetch -q origin main; git reset -q --hard origin/main; python3 scripts/daily_update.py "$MODE" $ARGS --file "$FILE" || exit $?; git add data/latest.xlsx; git commit -q -m "更新每日資料 ($MODE)"; }; done
           fi
+      - name: save run log (branch run-logs, readable without login)
+        if: always() && steps.plan.outputs.need == 'true'
+        run: |
+          test -f /tmp/run.log || exit 0
+          git config user.name github-actions; git config user.email actions@github.com
+          git stash -q -u 2>/dev/null || true
+          git switch -q --orphan run-logs
+          git rm -rq --cached . 2>/dev/null || true
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp /tmp/run.log run.log
+          git add run.log
+          git commit -q -m "run log $(date -u +%F\ %H:%M) (${{ job.status }})"
+          git push -q --force origin run-logs
