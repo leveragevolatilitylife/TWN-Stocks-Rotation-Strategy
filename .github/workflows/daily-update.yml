@@ -1,33 +1,44 @@
 # 每日自動更新 data/latest.xlsx（台北時間週一至週五）
-#   08:35  close：新增前一個美股交易日的 VIX 期貨 / Cboe 指數 / 0050 前日收盤，並重算
-#   09:05  open ：填入 0050 當日開盤價，並重算
+#   close：新增前一個美股交易日的 VIX 期貨 / Cboe 指數 / 0050 前日收盤，並重算
+#   open ：（09:00 之後）填入 0050 當日開盤價，並重算
+# GitHub 的排程常常延遲或漏跑，所以排了多個時間點；程式是冪等的，已完成的步驟會直接略過，
+# 沒事可做時不會安裝 LibreOffice，幾十秒就結束。
 # 安全機制：寫入前有範圍檢查；公式出現錯誤或數字異常就中止（網站維持前一天的樣子，Actions 會顯示失敗）。
-# DRY_RUN 為 true 時只把結果推到 dryrun-results 分支，不動 main（第一階段並行驗證用）。
+# DRY_RUN 為 true 時只把結果推到 dryrun-results 分支，不動 main。
 # 手動停用：Actions 頁面 → daily-update → Disable workflow。
 name: daily-update
 on:
-  schedule:
-    - cron: '35 0 * * 1-5'   # 08:35 Asia/Taipei
-    - cron: '5 1 * * 1-5'    # 09:05 Asia/Taipei
+  schedule:            # UTC；台北 = UTC+8
+    - cron: '35 0 * * 1-5'   # 08:35
+    - cron: '50 0 * * 1-5'   # 08:50
+    - cron: '5 1 * * 1-5'    # 09:05
+    - cron: '20 1 * * 1-5'   # 09:20
+    - cron: '35 1 * * 1-5'   # 09:35
+    - cron: '50 1 * * 1-5'   # 09:50
+    - cron: '20 2 * * 1-5'   # 10:20
+    - cron: '0 4 * * 1-5'    # 12:00
+    - cron: '0 7 * * 1-5'    # 15:00（收盤後核對開盤價）
+  push:
+    paths: ['.github/workflows/daily-update.yml']   # 修改本檔時順便跑一次
   workflow_dispatch:
     inputs:
       mode:
-        description: 'close / open / selftest'
-        default: 'close'
+        description: 'auto / close / open / selftest'
+        default: 'auto'
       today:
         description: '覆寫「今天」(YYYY-MM-DD，留空=台北今天)'
         default: ''
       dry_run:
         description: '只推 dryrun-results 分支，不動 main'
-        default: 'true'
+        default: 'false'
 permissions:
   contents: write
 concurrency:
   group: data-update
   cancel-in-progress: false
 env:
-  # 排程執行時使用的預設值；確認並行驗證沒問題後改成 'false'
-  SCHEDULE_DRY_RUN: 'true'
+  # 排程 / push 觸發時使用的預設值
+  SCHEDULE_DRY_RUN: 'false'
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -37,7 +48,6 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: pip install openpyxl
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libreoffice-calc
       - name: decide mode
         id: cfg
         run: |
@@ -46,15 +56,26 @@ jobs:
             echo "today=${{ inputs.today }}" >> $GITHUB_OUTPUT
             echo "dry=${{ inputs.dry_run }}" >> $GITHUB_OUTPUT
           else
-            case "${{ github.event.schedule }}" in
-              '35 0 * * 1-5') echo "mode=close" >> $GITHUB_OUTPUT ;;
-              *) echo "mode=open" >> $GITHUB_OUTPUT ;;
-            esac
+            echo "mode=auto" >> $GITHUB_OUTPUT
             echo "today=" >> $GITHUB_OUTPUT
             echo "dry=${SCHEDULE_DRY_RUN}" >> $GITHUB_OUTPUT
           fi
+      - name: anything to do?
+        id: plan
+        run: |
+          MODE='${{ steps.cfg.outputs.mode }}'; TODAY='${{ steps.cfg.outputs.today }}'
+          ARGS=""; [ -n "$TODAY" ] && ARGS="--today $TODAY"
+          if [ "$MODE" = "auto" ]; then
+            python3 scripts/daily_update.py plan $ARGS | tee /tmp/plan.txt
+            grep -q 'NEED=true' /tmp/plan.txt && echo "need=true" >> $GITHUB_OUTPUT || echo "need=false" >> $GITHUB_OUTPUT
+          else
+            echo "need=true" >> $GITHUB_OUTPUT
+          fi
+      - name: install LibreOffice
+        if: steps.plan.outputs.need == 'true'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libreoffice-calc
       - name: run update
-        id: run
+        if: steps.plan.outputs.need == 'true'
         run: |
           set -u
           MODE='${{ steps.cfg.outputs.mode }}'; TODAY='${{ steps.cfg.outputs.today }}'; DRY='${{ steps.cfg.outputs.dry }}'
@@ -63,8 +84,16 @@ jobs:
           if [ "$MODE" = "selftest" ]; then python3 scripts/daily_update.py selftest $ARGS; exit $?; fi
           if [ "$DRY" = "true" ]; then
             FILE=/tmp/work.xlsx
-            if [ "$MODE" = "open" ] && git fetch -q origin dryrun-results 2>/dev/null; then
+            if git fetch -q origin dryrun-results 2>/dev/null; then
               git show origin/dryrun-results:data/latest.xlsx > $FILE
+              # 以 main 為準：main 比較新（例如你手動上傳）就改用 main
+              python3 - <<'PY'
+          import openpyxl, subprocess
+          a=openpyxl.load_workbook('/tmp/work.xlsx',read_only=True).active
+          b=openpyxl.load_workbook('data/latest.xlsx',read_only=True).active
+          if b['A5'].value > a['A5'].value:
+              subprocess.run(['cp','data/latest.xlsx','/tmp/work.xlsx'],check=True)
+          PY
             else
               cp data/latest.xlsx $FILE
             fi
@@ -72,7 +101,6 @@ jobs:
           set +e
           python3 scripts/daily_update.py "$MODE" $ARGS --file "$FILE"; RC=$?
           set -e
-          echo "rc=$RC" >> $GITHUB_OUTPUT
           if [ $RC -eq 10 ]; then echo "nothing to do"; exit 0; fi
           [ $RC -eq 0 ] || exit $RC
           git config user.name github-actions; git config user.email actions@github.com

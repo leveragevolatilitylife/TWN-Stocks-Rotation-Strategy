@@ -214,25 +214,26 @@ def prev_close_0050(today):
 
 
 def open_price_0050(today, wait_s=900):
+    """TWSE (official, published after the close) if it already has `today`; otherwise Yahoo (live)."""
     deadline = time.time() + wait_s
     while True:
+        tw = None
         try:
-            y = yahoo_0050().get(today)
-            if y and y['open']:
-                o = round(float(y['open']), 2)
-                try:
-                    t = twse_month(today).get(today)
-                    if t and abs(t['open'] - o) > 0.011:
-                        raise Fail(f'0050 open mismatch: TWSE {t["open"]} vs Yahoo {o}')
-                except Fail:
-                    raise
-                except Exception as e:  # noqa: BLE001
-                    log('WARN twse open cross-check skipped:', e)
-                return o
-        except Fail:
-            raise
+            tw = twse_month(today).get(today)
+        except Exception as e:  # noqa: BLE001
+            log('WARN twse:', e)
+        ya = None
+        try:
+            ya = yahoo_0050().get(today)
         except Exception as e:  # noqa: BLE001
             log('WARN yahoo:', e)
+        yo = round(float(ya['open']), 2) if ya and ya.get('open') else None
+        if tw:
+            if yo is not None and abs(tw['open'] - yo) > 0.011:
+                log(f'WARN 0050 open differs: TWSE {tw["open"]} vs Yahoo {yo}; using TWSE')
+            return tw['open']
+        if yo is not None:
+            return yo
         if time.time() > deadline:
             raise Fail(f'no 0050 open price for {today} after waiting')
         log('open price not available yet, retry in 60s')
@@ -385,6 +386,84 @@ def mode_open(a, today):
     return f'open {o}'
 
 
+def taipei_now(today_override):
+    return dt.datetime.now(TPE) if not today_override else dt.datetime.combine(
+        dt.date.fromisoformat(today_override), dt.time(23, 59), TPE)
+
+
+def mode_plan(a, today):
+    """Cheap check (no market-data download): is there anything to do right now? prints NEED=true/false."""
+    need = False
+    if not tw_closed(today):
+        ws = load_row5(a.file)
+        a5, az5, ba5 = ws['A5'].value.date(), ws['AZ5'].value.date(), ws['BA5'].value
+        A = prev_weekday(today)
+        need_close = not (a5 >= A or az5 >= today)
+        late = taipei_now(a.today).time() >= dt.time(9, 0)
+        need_open = late and (need_close or (az5 == today and ba5 in (None, '')))
+        need = need_close or need_open
+        if not need and taipei_now(a.today).time() >= AUDIT_FROM and az5 == today and ba5 not in (None, ''):
+            try:
+                t = twse_month(today).get(today)
+                if t and abs(float(ba5) - t['open']) > 0.011:
+                    need = True
+                    log(f'plan: audit needed (BA5={ba5}, TWSE open={t["open"]})')
+            except Exception as e:  # noqa: BLE001
+                log('WARN plan audit check failed:', e)
+        log(f'plan: A5={a5} AZ5={az5} BA5={ba5} need_close={need_close} need_open={need_open}')
+    print('NEED=' + ('true' if need else 'false'))
+    return 'plan'
+
+
+AUDIT_FROM = dt.time(14, 30)
+
+
+def audit_open(a, today):
+    """After the close: compare BA5 (morning, Yahoo) with the official TWSE open; correct it if they differ."""
+    if taipei_now(a.today).time() < AUDIT_FROM or tw_closed(today):
+        raise Skip('audit not due')
+    ws = load_row5(a.file)
+    if ws['AZ5'].value.date() != today or ws['BA5'].value in (None, ''):
+        raise Skip('no open price to audit')
+    t = twse_month(today).get(today)
+    if not t:
+        raise Skip('TWSE has no data for today yet')
+    cur = float(ws['BA5'].value)
+    if abs(cur - t['open']) <= 0.011:
+        raise Skip(f'BA5 {cur} matches TWSE open')
+    log(f'AUDIT: BA5 {cur} != TWSE open {t["open"]}, correcting')
+    tmp = str(Path(a.file).with_suffix('.new.xlsx'))
+    daily_row.cmd_set(SimpleNamespace(src=a.file, dst=tmp, expect_az=today.isoformat(), set=[f'BA={t["open"]}']))
+    recalc(tmp)
+    check_recalculated(tmp, {'AZ5': today, 'BA5': t['open']})
+    if not a.dry_run:
+        os.replace(tmp, a.file)
+    return f'corrected open {cur} -> {t["open"]}'
+
+
+def mode_auto(a, today):
+    """Do whatever is pending: close step first, then (from 09:00 Taipei) the open-price step."""
+    done = []
+    try:
+        done.append(mode_close(a, today))
+    except Skip as e:
+        log('close step skipped:', e)
+    if taipei_now(a.today).time() >= dt.time(9, 0):
+        try:
+            done.append(mode_open(a, today))
+        except Skip as e:
+            log('open step skipped:', e)
+    else:
+        log('before 09:00 Taipei: open step not due yet')
+    try:
+        done.append(audit_open(a, today))
+    except Skip as e:
+        log('audit skipped:', e)
+    if not done:
+        raise Skip('nothing to do')
+    return '; '.join(done)
+
+
 def mode_selftest(a, today):
     """Fetch everything for A=prev weekday of `today` and print it (no workbook is written)."""
     A = prev_weekday(today)
@@ -393,6 +472,9 @@ def mode_selftest(a, today):
     for sym in ['VIX9D', 'VIX', 'VIX3M', 'VIX6M', 'VIX1Y']:
         log(sym, cboe_index_close(sym, A))
     log('prev close', prev_close_0050(today))
+    ys = yahoo_0050()
+    log('yahoo last bars', [(str(k), v) for k, v in sorted(ys.items())[-4:]])
+    log('twse last rows', sorted(twse_month(today).items())[-3:])
     log('open', open_price_0050(today, 0))
     log('tw_closed', tw_closed(today))
     for d in (dt.date(2026, 1, 1), dt.date(2026, 4, 3), dt.date(2026, 7, 3), dt.date(2026, 11, 26), dt.date(2026, 12, 25), dt.date(2026, 10, 16)):
@@ -402,7 +484,7 @@ def mode_selftest(a, today):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('mode', choices=['close', 'open', 'selftest'])
+    p.add_argument('mode', choices=['close', 'open', 'auto', 'plan', 'selftest'])
     p.add_argument('--file', default='data/latest.xlsx')
     p.add_argument('--today')
     p.add_argument('--dry-run', action='store_true')
@@ -410,7 +492,7 @@ def main():
     a = p.parse_args()
     today = dt.date.fromisoformat(a.today) if a.today else dt.datetime.now(TPE).date()
     try:
-        msg = {'close': mode_close, 'open': mode_open, 'selftest': mode_selftest}[a.mode](a, today)
+        msg = {'close': mode_close, 'open': mode_open, 'auto': mode_auto, 'plan': mode_plan, 'selftest': mode_selftest}[a.mode](a, today)
         log('DONE:', msg)
         return 0
     except Skip as e:
