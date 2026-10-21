@@ -39,6 +39,7 @@ concurrency:
 env:
   # 排程 / push 觸發時使用的預設值
   SCHEDULE_DRY_RUN: 'false'
+  PYTHONDONTWRITEBYTECODE: '1'
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -110,7 +111,7 @@ jobs:
             git add data/latest.xlsx && git commit -q -m "dry-run $MODE $(date -u +%F\ %H:%M)"
             git push -q --force origin dry:refs/heads/dryrun-results
           else
-            test "$(git status --porcelain)" = " M data/latest.xlsx" || { echo "unexpected changes:"; git status --porcelain; exit 1; }
+            test "$(git status --porcelain --untracked-files=no)" = " M data/latest.xlsx" || { echo "unexpected changes:"; git status --porcelain; exit 1; }
             git add data/latest.xlsx
             git commit -q -m "更新每日資料 ($MODE $(TZ=Asia/Taipei date +%F))"
             for i in 1 2 3; do git push -q origin HEAD:main && break || { sleep 5; git fetch -q origin main; git reset -q --hard origin/main; python3 scripts/daily_update.py "$MODE" $ARGS --file "$FILE" || exit $?; git add data/latest.xlsx; git commit -q -m "更新每日資料 ($MODE)"; }; done
