@@ -166,7 +166,30 @@ def cboe_index_close(sym, A):
             best = (d, float(r['CLOSE']))
     if best is None:
         raise Fail(f'{sym}: no history row')
+    if best[0] < A:
+        # Cboe's *_History.csv is published with a delay (VIX itself can lag the other indices by hours).
+        # Fall back to the delayed-quote JSON, which holds the final close once the market is closed.
+        q = cboe_final_quote(sym, A)
+        if q is not None:
+            log(f'{sym}: history CSV lags (latest {best[0]}), using final quote close {q} for {A}')
+            return (A, q)
     return best
+
+
+def cboe_final_quote(sym, A):
+    """final close of index `sym` for trading day A from Cboe's delayed-quote JSON, or None if not final/not A."""
+    try:
+        j = json.loads(http(f'https://cdn.cboe.com/api/global/delayed_quotes/quotes/_{sym}.json', tries=2))
+        d = j['data']
+        ltt = dt.datetime.fromisoformat(str(d['last_trade_time']))
+        close, cur = float(d['close']), float(d['current_price'])
+    except Exception as e:  # noqa: BLE001
+        log(f'WARN {sym} quote fallback unavailable: {e}')
+        return None
+    if ltt.date() != A or ltt.hour < 16 or abs(close - cur) > 1e-9 or close <= 0:
+        log(f'WARN {sym} quote is not the final close of {A}: last_trade_time={ltt} close={close} current={cur}')
+        return None
+    return close
 
 
 def twse_month(d):
