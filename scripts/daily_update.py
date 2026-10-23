@@ -60,15 +60,15 @@ def r3(x):
 
 
 # ---------------------------------------------------------------- calendars
-def tw_closed(today):
-    """True if the Taiwan stock market is closed on `today` (weekend or scheduled holiday)."""
+def tw_day_kind(today):
+    """'weekend' | 'holiday' (scheduled TWSE closure on a weekday) | 'open'"""
     if today.weekday() >= 5:
-        return True
+        return 'weekend'
     try:
         data = json.loads(http('https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule'))
     except Exception as e:  # noqa: BLE001
         log('WARN holiday schedule unavailable:', e)
-        return False
+        return 'open'
     roc = f'{today.year - 1911}{today.month:02d}{today.day:02d}'
     for it in data:
         if str(it.get('Date')) == roc:
@@ -76,8 +76,13 @@ def tw_closed(today):
             if '開始交易' in desc or '最後交易' in desc:
                 continue
             log('TW holiday:', it)
-            return True
-    return False
+            return 'holiday'
+    return 'open'
+
+
+def tw_closed(today):
+    """True if the Taiwan stock market is closed on `today` (weekend or scheduled holiday)."""
+    return tw_day_kind(today) != 'open'
 
 
 def prev_weekday(d):
@@ -354,15 +359,23 @@ def check_recalculated(path, expect):
 
 # ---------------------------------------------------------------- modes
 def mode_close(a, today):
-    if tw_closed(today):
-        raise Skip('Taiwan market closed today')
+    kind = tw_day_kind(today)
+    if kind == 'weekend':
+        raise Skip('weekend')
     A = prev_weekday(today)
+    tw_row = kind == 'holiday'      # Taiwan closed, but the US session of A may have happened -> "TW-closed row"
+    if tw_row and nyse_holiday(A):
+        raise Skip(f'both markets closed (Taiwan holiday {today}, NYSE holiday {A}): no row')
     ws = load_row5(a.file)
     a5, az5 = ws['A5'].value.date(), ws['AZ5'].value.date()
     if a5 >= A or az5 >= today:
         raise Skip(f'already done (A5={a5}, AZ5={az5})')
     old = {c: ws[f'{c}5'].value for c in list('BCDEFGH') + list('MNOPQ') + ['BB']}
     fut, m1exp, hol = futures_for(A)
+    if tw_row and hol:
+        raise Skip(f'both markets closed (Taiwan holiday {today}, no US session on {A}): no row')
+    if tw_row:
+        log(f'Taiwan market closed on {today}: adding a TW-closed row (BA stays empty) for US session {A}')
     K = (m1exp - A).days - 1
     idx = {}
     for sym, col in zip(['VIX9D', 'VIX', 'VIX3M', 'VIX6M', 'VIX1Y'], 'MNOPQ'):
@@ -375,6 +388,8 @@ def mode_close(a, today):
     vals.update(idx)
     vals['K'] = K
     vals['BB'] = bb
+    if tw_row:
+        vals['BA'] = bb             # Taiwan closed: the 0050 "open" is filled with the previous close
     # sanity
     for k, v in vals.items():
         if not isinstance(v, (int, float)) or v < 0:
@@ -416,7 +431,11 @@ def mode_open(a, today):
     bb = float(ws['BB5'].value)
     o = open_price_0050(today, a.wait, live=not a.today)
     if o is None:
-        raise Closed(f'{today}: no trading data after {OPEN_DEADLINE:%H:%M}')
+        if nyse_holiday(ws['A5'].value.date()):
+            raise Closed(f'{today}: no trading data after {OPEN_DEADLINE:%H:%M} and no US session on {ws["A5"].value.date()}')
+        # unscheduled Taiwan closure (typhoon ...) but the US session happened: keep the row, open = previous close
+        o = bb
+        log(f'{today}: Taiwan market did not open; BA filled with the previous close {bb}')
     if not o > 0 or abs(o / bb - 1) > 0.08:
         raise Fail(f'open {o} deviates >8% from previous close {bb}')
     tmp = str(Path(a.file).with_suffix('.new.xlsx'))
@@ -438,13 +457,14 @@ def taipei_now(today_override):
 def mode_plan(a, today):
     """Cheap check (no market-data download): is there anything to do right now? prints NEED=true/false."""
     need = False
-    if not tw_closed(today):
+    kind = tw_day_kind(today)
+    if kind != 'weekend':
         ws = load_row5(a.file)
         a5, az5, ba5 = ws['A5'].value.date(), ws['AZ5'].value.date(), ws['BA5'].value
         A = prev_weekday(today)
-        need_close = not (a5 >= A or az5 >= today)
+        need_close = not (a5 >= A or az5 >= today) and not (kind == 'holiday' and nyse_holiday(A))
         late = taipei_now(a.today).time() >= dt.time(9, 0)
-        need_open = late and (need_close or (az5 == today and ba5 in (None, '')))
+        need_open = kind == 'open' and late and (need_close or (az5 == today and ba5 in (None, '')))
         need = need_close or need_open
         if not need and taipei_now(a.today).time() >= AUDIT_FROM and az5 == today and ba5 not in (None, ''):
             try:
@@ -454,7 +474,7 @@ def mode_plan(a, today):
                     log(f'plan: audit needed (BA5={ba5}, TWSE open={t["open"]})')
             except Exception as e:  # noqa: BLE001
                 log('WARN plan audit check failed:', e)
-        log(f'plan: A5={a5} AZ5={az5} BA5={ba5} need_close={need_close} need_open={need_open}')
+        log(f'plan: kind={kind} A5={a5} AZ5={az5} BA5={ba5} need_close={need_close} need_open={need_open}')
     print('NEED=' + ('true' if need else 'false'))
     return 'plan'
 
