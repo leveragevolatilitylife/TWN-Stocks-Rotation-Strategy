@@ -46,6 +46,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 20 }
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: pip install openpyxl
@@ -104,6 +105,11 @@ jobs:
           python3 scripts/daily_update.py "$MODE" $ARGS --file "$FILE"; RC=$?
           set -e
           if [ $RC -eq 10 ]; then echo "nothing to do"; exit 0; fi
+          if [ $RC -eq 11 ]; then
+            echo "market closed today (typhoon day etc.) - today's row is not kept"
+            if [ "$DRY" != "true" ] && [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then git push -q origin HEAD:main; fi
+            exit 0
+          fi
           [ $RC -eq 0 ] || exit $RC
           git config user.name github-actions; git config user.email actions@github.com
           if [ "$DRY" = "true" ]; then

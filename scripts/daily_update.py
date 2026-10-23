@@ -23,10 +23,15 @@ import openpyxl  # noqa: E402
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
 TPE = dt.timezone(dt.timedelta(hours=8))
 SKIP = 10
+CLOSED = 11
 
 
 class Skip(Exception):
     pass
+
+
+class Closed(Exception):
+    """the Taiwan market did not open today although the calendar said it would (typhoon day etc.)"""
 
 
 class Fail(Exception):
@@ -236,19 +241,27 @@ def prev_close_0050(today):
     return c, d
 
 
-def open_price_0050(today, wait_s=900):
-    """TWSE (official, published after the close) if it already has `today`; otherwise Yahoo (live)."""
+OPEN_DEADLINE = dt.time(9, 30)
+
+
+def open_price_0050(today, wait_s=900, live=True):
+    """TWSE (official, published after the close) if it already has `today`; otherwise Yahoo (live).
+    Returns None when the market evidently did not open today: no price from either source after 09:30 Taipei,
+    while both sources answered normally (live=True only; replays with --today raise Fail instead)."""
     deadline = time.time() + wait_s
     while True:
         tw = None
+        tw_ok = ya_ok = True
         try:
             tw = twse_month(today).get(today)
         except Exception as e:  # noqa: BLE001
+            tw_ok = False
             log('WARN twse:', e)
         ya = None
         try:
             ya = yahoo_0050().get(today)
         except Exception as e:  # noqa: BLE001
+            ya_ok = False
             log('WARN yahoo:', e)
         yo = round(float(ya['open']), 2) if ya and ya.get('open') else None
         if tw:
@@ -257,6 +270,12 @@ def open_price_0050(today, wait_s=900):
             return tw['open']
         if yo is not None:
             return yo
+        now = dt.datetime.now(TPE)
+        if live and now.date() == today and now.time() >= OPEN_DEADLINE:
+            if tw_ok and ya_ok:
+                log(f'no 0050 price for {today} from TWSE or Yahoo at {now:%H:%M} -> market did not open today')
+                return None
+            raise Fail('0050 price sources unavailable; cannot tell whether the market opened')
         if time.time() > deadline:
             raise Fail(f'no 0050 open price for {today} after waiting')
         log('open price not available yet, retry in 60s')
@@ -395,7 +414,9 @@ def mode_open(a, today):
     if ws['BA5'].value not in (None, ''):
         raise Skip('BA5 already filled')
     bb = float(ws['BB5'].value)
-    o = open_price_0050(today, a.wait)
+    o = open_price_0050(today, a.wait, live=not a.today)
+    if o is None:
+        raise Closed(f'{today}: no trading data after {OPEN_DEADLINE:%H:%M}')
     if not o > 0 or abs(o / bb - 1) > 0.08:
         raise Fail(f'open {o} deviates >8% from previous close {bb}')
     tmp = str(Path(a.file).with_suffix('.new.xlsx'))
@@ -464,6 +485,57 @@ def audit_open(a, today):
     return f'corrected open {cur} -> {t["open"]}'
 
 
+def git(*args, check=True):
+    r = subprocess.run(['git', *args], capture_output=True, text=True)
+    if check and r.returncode != 0:
+        raise Fail(f'git {" ".join(args)} failed: {r.stderr.strip()[:300]}')
+    return r.stdout.strip()
+
+
+def top_row(path_or_bytes):
+    import io as _io
+    src = _io.BytesIO(path_or_bytes) if isinstance(path_or_bytes, bytes) else path_or_bytes
+    ws = openpyxl.load_workbook(src, read_only=True).active
+    return ws['A5'].value.date(), ws['AZ5'].value.date(), ws['BA5'].value
+
+
+def undo_today_row(a, today):
+    """The market is closed today: take the row for `today` out again.
+    1) discard what this run changed in the working copy;
+    2) if an earlier run already committed today's row (and nobody but the bot did), revert that commit."""
+    path = a.file
+    try:
+        subprocess.run(['git', 'checkout', '--', path], check=True, capture_output=True)
+    except Exception as e:  # noqa: BLE001
+        log('WARN could not restore working copy:', e)
+    try:
+        _, az5, ba5 = top_row(path)
+    except Exception as e:  # noqa: BLE001
+        log('WARN cannot read top row:', e)
+        return
+    if az5 != today or ba5 not in (None, ''):
+        log('no row for today in the repo file; nothing to revert')
+        return
+    sha = git('log', '-1', '--format=%H', '--', path)
+    author = git('log', '-1', '--format=%an', '--', path)
+    if author != 'github-actions':
+        log(f'WARN today\'s row was added by {author} (commit {sha[:7]}); not reverting automatically')
+        return
+    try:
+        raw = subprocess.run(['git', 'show', f'{sha}~1:{path}'], capture_output=True, check=True).stdout
+        _, paz, _ = top_row(raw)
+    except Exception as e:  # noqa: BLE001
+        log('WARN cannot inspect parent version:', e)
+        return
+    if paz >= today:
+        log('parent version already has today\'s row; not reverting')
+        return
+    git('config', 'user.name', 'github-actions')
+    git('config', 'user.email', 'actions@github.com')
+    git('revert', '--no-edit', sha)
+    log(f'reverted commit {sha[:7]} (row {today} removed because the market was closed)')
+
+
 def mode_auto(a, today):
     """Do whatever is pending: close step first, then (from 09:00 Taipei) the open-price step."""
     done = []
@@ -476,6 +548,10 @@ def mode_auto(a, today):
             done.append(mode_open(a, today))
         except Skip as e:
             log('open step skipped:', e)
+        except Closed as e:
+            log('MARKET CLOSED TODAY:', e)
+            undo_today_row(a, today)
+            raise
     else:
         log('before 09:00 Taipei: open step not due yet')
     try:
@@ -521,6 +597,9 @@ def main():
     except Skip as e:
         log('SKIP:', e)
         return SKIP
+    except Closed as e:
+        log('CLOSED:', e)
+        return CLOSED
     except Fail as e:
         log('FAIL:', e)
         return 1
