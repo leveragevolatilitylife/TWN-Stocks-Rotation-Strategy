@@ -1,0 +1,9 @@
+TW holiday: {'Name': '臺灣光復暨金門古寧頭大捷紀念日', 'Date': '1151026', 'Weekday': '一', 'Description': '臺灣光復暨金門古寧頭大捷紀念日為10月25日適逢星期日，於10月26日（星期一）補假。'}
+Taiwan market closed on 2026-10-26: adding a TW-closed row (BA stays empty) for US session 2026-10-23
+0050 previous close 106.9 on 2026-10-22
+A=2026-10-23 az=2026-10-26 holiday=False K=25 {'B': 19.614, 'C': 19.496, 'D': 20.203, 'E': 20.525, 'F': 20.637, 'G': 20.99, 'H': 21.077, 'M': 18.7, 'N': 19.45, 'O': 20.48, 'P': 21.96, 'Q': 22.82, 'K': 25, 'BB': 106.9, 'BA': 106.9}
+inserted row 5: 2026-10-23 / 2026-10-26  {'B': '19.614', 'C': '19.496', 'D': '20.203', 'E': '20.525', 'F': '20.637', 'G': '20.99', 'H': '21.077', 'M': '18.7', 'N': '19.45', 'O': '20.48', 'P': '21.96', 'Q': '22.82', 'K': '25', 'BB': '106.9', 'BA': '106.9'}
+recalc ok: 4 known bottom errors; signals AK5=00635U AM5=00635U AO5=00635U AQ5=00635U AS5=00635U
+open step skipped: Taiwan market closed today
+audit skipped: audit not due
+DONE: inserted 2026-10-23/2026-10-26
