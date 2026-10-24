@@ -85,6 +85,13 @@ def tw_closed(today):
     return tw_day_kind(today) != 'open'
 
 
+def row_day(today):
+    """The Taiwan trading day whose row is built by a run on `today`.
+    Saturday: the run already prepares Monday's row (A = Friday's US session), so the dashboard has Friday's
+    data over the weekend; Monday only has to fill in the 0050 open."""
+    return today + dt.timedelta(days=2) if today.weekday() == 5 else today
+
+
 def prev_weekday(d):
     d -= dt.timedelta(days=1)
     while d.weekday() >= 5:
@@ -359,6 +366,7 @@ def check_recalculated(path, expect):
 
 # ---------------------------------------------------------------- modes
 def mode_close(a, today):
+    today = row_day(today)
     kind = tw_day_kind(today)
     if kind == 'weekend':
         raise Skip('weekend')
@@ -457,6 +465,8 @@ def taipei_now(today_override):
 def mode_plan(a, today):
     """Cheap check (no market-data download): is there anything to do right now? prints NEED=true/false."""
     need = False
+    real_today = today
+    today = row_day(today)
     kind = tw_day_kind(today)
     if kind != 'weekend':
         ws = load_row5(a.file)
@@ -464,7 +474,7 @@ def mode_plan(a, today):
         A = prev_weekday(today)
         need_close = not (a5 >= A or az5 >= today) and not (kind == 'holiday' and nyse_holiday(A))
         late = taipei_now(a.today).time() >= dt.time(9, 0)
-        need_open = kind == 'open' and late and (need_close or (az5 == today and ba5 in (None, '')))
+        need_open = real_today == today and kind == 'open' and late and (need_close or (az5 == today and ba5 in (None, '')))
         need = need_close or need_open
         if not need and taipei_now(a.today).time() >= AUDIT_FROM and az5 == today and ba5 not in (None, ''):
             try:
