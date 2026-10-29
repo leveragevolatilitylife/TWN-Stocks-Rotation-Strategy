@@ -97,8 +97,10 @@ h2.section-title span.hint{font-weight:400;font-size:12px;color:var(--muted-2);}
 }
 .metric-card .label{font-size:11.5px;color:var(--muted);margin-bottom:8px;}
 .metric-card .value{font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;font-size:20px;font-weight:600;}
-.metric-card .value.up::after{content:" ▲";color:var(--red);font-size:12px;}
-.metric-card .value.down::after{content:" ▼";color:var(--green);font-size:12px;}
+.metric-card .value.up::after{content:" ▲";font-size:12px;}
+.metric-card .value.down::after{content:" ▼";font-size:12px;}
+.metric-card .value.risk-up::after{color:var(--red);}
+.metric-card .value.risk-down::after{color:var(--green);}
 .metric-card .meta{font-size:10.5px;color:var(--muted-2);margin-top:6px;font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;}
 .pct-bar{height:4px;background:var(--panel-2);border-radius:2px;margin-top:8px;overflow:hidden;position:relative;}
 .pct-bar i{display:block;height:100%;}
@@ -606,15 +608,20 @@ function renderDashboard(DATA){
     if(m.type==='pct'){ displayVal = fmtPct(val, m.d); medianStr = fmtPct(median, m.d); }
     else { displayVal = fmt(val, m.d); medianStr = fmt(median, m.d); }
 
-    let dirClass = '';
-    if(val!==null && pval!==null){ dirClass = val > pval ? 'up' : (val < pval ? 'down' : ''); }
+    let dirClass = '', riskClass = '';
+    if(val!==null && pval!==null && val!==pval){
+      const up = val > pval;
+      dirClass = up ? 'up' : 'down';
+      const riskUp = (m.bias==='higher') ? !up : up;
+      riskClass = riskUp ? 'risk-up' : 'risk-down';
+    }
 
     const card = document.createElement('div');
     card.className = 'metric-card';
     const rankPct = (rank!==null && rank!==undefined) ? Math.round(rank*1000)/10 : null;
     card.innerHTML = `
       <div class="label">${m.label}</div>
-      <div class="value ${dirClass}">${displayVal}</div>
+      <div class="value ${dirClass} ${riskClass}">${displayVal}</div>
       <div class="meta">中位數 ${medianStr}${rankPct!==null ? ' · 百分位 '+rankPct+'%' : ''}</div>
       <div class="pct-bar"><i class="${tierClass(rank, m.bias)}" style="width:${rankPct!==null?rankPct:0}%"></i></div>
     `;
