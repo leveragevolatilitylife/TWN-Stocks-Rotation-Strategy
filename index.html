@@ -99,14 +99,14 @@ h2.section-title span.hint{font-weight:400;font-size:12px;color:var(--muted-2);}
 .metric-card .value{font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;font-size:20px;font-weight:600;}
 .metric-card .value.up::after{content:" ▲";font-size:12px;}
 .metric-card .value.down::after{content:" ▼";font-size:12px;}
-.metric-card .value.risk-up::after{color:var(--red);}
-.metric-card .value.risk-down::after{color:var(--green);}
+.metric-card .value.risk-up::after{color:#ff4d3f;text-shadow:0 0 2px rgba(0,0,0,.9),0 0 1px rgba(0,0,0,.9);}
+.metric-card .value.risk-down::after{color:#2ee58f;text-shadow:0 0 2px rgba(0,0,0,.9),0 0 1px rgba(0,0,0,.9);}
 .metric-card .meta{font-size:10.5px;color:var(--muted-2);margin-top:6px;font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;}
-.pct-bar{height:4px;background:var(--panel-2);border-radius:2px;margin-top:8px;overflow:hidden;position:relative;}
-.pct-bar i{display:block;height:100%;}
-.pct-bar i.tier-low{background:var(--green);}
-.pct-bar i.tier-mid{background:var(--amber);}
-.pct-bar i.tier-high{background:var(--red);}
+.metric-card{transition:background .2s;}
+.metric-card .label{color:rgba(255,255,255,.88);}
+.metric-card .meta{color:rgba(255,255,255,.78);text-shadow:0 1px 1px rgba(0,0,0,.35);}
+.risk-legend-grad{display:inline-flex;gap:2px;margin:0 6px;vertical-align:middle;}
+.risk-legend-grad b{display:block;width:12px;height:8px;border-radius:2px;opacity:.85;}
 
 /* ---- strategy cards ---- */
 .strat-grid{
@@ -313,9 +313,8 @@ footer p{margin:4px 0;}
   <h2 class="section-title">
     前一晚美股收盤數據 <span class="hint" id="snapshot-hint"></span>
     <span class="timeline-legend" style="margin-left:auto;">
-      <span><i class="dot" style="background:var(--green)"></i>低度風險</span>
-      <span><i class="dot" style="background:var(--amber)"></i>中度風險</span>
-      <span><i class="dot" style="background:var(--red)"></i>高度風險</span>
+      <span>高度風險<span class="risk-legend-grad" id="risk-steps"></span>低度風險</span>
+      <span>▲▼ 紅＝風險上升　綠＝風險下降</span>
     </span>
   </h2>
   <div class="metric-grid" id="metric-grid"></div>
@@ -442,6 +441,21 @@ function fmtPct(v, d){
   return (v*100).toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d}) + '%';
 }
 function parseDate(s){ return new Date(s+'T00:00:00'); }
+// 風險程度背景色：10 格色階（依有利程度的分位，每格 10 分位）
+// 最差10分位 #FF2400 → 中位 #FFE135 → 最佳10分位 #00FF7F，其間等距內插
+const RISK_STEPS = (()=>{
+  const R=[255,36,0], M=[255,225,53], G=[0,255,127];
+  return Array.from({length:10},(_,i)=>{
+    const t=i/9, a=t<0.5?R:M, b=t<0.5?M:G, u=t<0.5?t/0.5:(t-0.5)/0.5;
+    return a.map((v,k)=>Math.round(v+(b[k]-v)*u));
+  });
+})();
+function riskBg(rank, bias){
+  if(rank===null || rank===undefined) return '';
+  const f = Math.max(0, Math.min(1, bias==='higher' ? rank : (1-rank)));
+  const c = RISK_STEPS[Math.min(9, Math.floor(f*10))];
+  return `background:rgba(${c[0]},${c[1]},${c[2]},0.62);border-color:rgba(${c[0]},${c[1]},${c[2]},0.9);`;
+}
 function tierClass(rank, bias){
   if(rank===null || rank===undefined) return '';
   const favorable = bias==='higher' ? rank : (1-rank);
@@ -597,6 +611,8 @@ function renderDashboard(DATA){
   ];
   const rowKeyMap = { adjust_m1m2_futures:'adj_m1m2_futures' };
 
+  const stepsEl = document.getElementById('risk-steps');
+  if(stepsEl) stepsEl.innerHTML = RISK_STEPS.map(c=>`<b style="background:rgb(${c[0]},${c[1]},${c[2]})"></b>`).join('');
   const grid = document.getElementById('metric-grid');
   METRICS.forEach(m=>{
     const rowKey = rowKeyMap[m.key] || m.key;
@@ -618,12 +634,12 @@ function renderDashboard(DATA){
 
     const card = document.createElement('div');
     card.className = 'metric-card';
+    card.style.cssText = riskBg(rank, m.bias);
     const rankPct = (rank!==null && rank!==undefined) ? Math.round(rank*1000)/10 : null;
     card.innerHTML = `
       <div class="label">${m.label}</div>
       <div class="value ${dirClass} ${riskClass}">${displayVal}</div>
       <div class="meta">中位數 ${medianStr}${rankPct!==null ? ' · 百分位 '+rankPct+'%' : ''}</div>
-      <div class="pct-bar"><i class="${tierClass(rank, m.bias)}" style="width:${rankPct!==null?rankPct:0}%"></i></div>
     `;
     grid.appendChild(card);
   });
