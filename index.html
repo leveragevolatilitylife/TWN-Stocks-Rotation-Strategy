@@ -712,7 +712,7 @@ function renderDashboard(DATA){
     afterDatasetsDraw(chart){
       const {ctx, chartArea, scales} = chart;
       if(latest.vix!==null && latest.vix!==undefined){
-        drawLineEndLabel(ctx, chartArea, scales.y.getPixelForValue(latest.vix), fmt(latest.vix,2), COLORS.text);
+        drawLineEndLabel(ctx, chartArea, scales.y.getPixelForValue(latest.vix), fmt(latest.vix,2), COLORS.amber);
       }
       if(prev && prev.vix!==null && prev.vix!==undefined){
         drawLineEndLabel(ctx, chartArea, scales.y.getPixelForValue(prev.vix), fmt(prev.vix,2), COLORS.blue);
@@ -745,19 +745,20 @@ function renderDashboard(DATA){
     data:{
       labels: monthLabels,
       datasets:[
-        { label:'最新VIX現貨（'+latest.date+'）', data: latest.vix!==null? flatLine(latest.vix,7):[], borderColor:'#eeece4', borderWidth:1.5, borderDash:[6,4], pointRadius:0, order:3 },
-        prev && prev.vix!==null ? { label:'前一日VIX現貨（'+prev.date+'）', data: flatLine(prev.vix,7), borderColor:COLORS.blue, borderWidth:1.5, borderDash:[6,4], pointRadius:0, order:3 } : null,
+        { label:'最新VIX現貨（'+latest.date+'）', data: latest.vix!==null? flatLine(latest.vix,7):[], borderColor:COLORS.amber, borderWidth:1.5, borderDash:[6,4], pointRadius:0, pointStyle:'line', order:3 },
+        prev && prev.vix!==null ? { label:'前一日VIX現貨（'+prev.date+'）', data: flatLine(prev.vix,7), borderColor:COLORS.blue, borderWidth:1.5, borderDash:[6,4], pointRadius:0, pointStyle:'line', order:3 } : null,
         { label: latest.date, data: latestFut, borderColor: COLORS.amber, backgroundColor: COLORS.amber,
           pointRadius:4, pointBackgroundColor: 'transparent', pointBorderColor: COLORS.amber, pointBorderWidth:1.6,
-          borderWidth:2.4, tension:0.3, order:1 },
-        prev ? { label: prev.date, data: prevFut, borderColor: COLORS.muted, backgroundColor: 'transparent',
+          borderWidth:2.4, tension:0.3, order:1, pointStyle:'rect' },
+        prev ? { label: prev.date, data: prevFut, borderColor: COLORS.blue, backgroundColor: 'transparent',
           pointRadius:4, pointBackgroundColor: 'transparent', pointBorderColor: COLORS.blue, pointBorderWidth:1.6,
-          borderWidth:1.3, tension:0.3, order:2 } : null
+          borderWidth:1.3, tension:0.3, order:2, pointStyle:'rect' } : null
       ].filter(Boolean)
     },
     options:{
       animation:false, maintainAspectRatio:false, layout:{padding:{top:30, right:52}},
-      plugins:{ legend:{ labels:{color:COLORS.muted, font:{family:"ui-monospace",size:11}} }, tooltip:{ enabled:true } },
+      plugins:{ legend:{ labels:{color:COLORS.muted, font:{family:"ui-monospace",size:11}, usePointStyle:true, pointStyleWidth:40,
+        generateLabels(chart){ const items=Chart.defaults.plugins.legend.labels.generateLabels(chart); items.forEach(it=>{ const ds=chart.data.datasets[it.datasetIndex]; if(ds && ds.pointStyle==='rect') it.fillStyle = ds.backgroundColor; }); return items; } } }, tooltip:{ enabled:true } },
       scales:{
         x:{ grid:{color: COLORS.line}, ticks:{color: COLORS.muted, font:{family:"ui-monospace"}} },
         y:{ grid:{color: COLORS.line}, ticks:{color: COLORS.muted, font:{family:"ui-monospace"}} }
@@ -786,7 +787,7 @@ function renderDashboard(DATA){
         const w = ctx.measureText(text).width + 12;
         const left = point.x - w/2;
         if(left < lastRight + 3) return;
-        drawCallout(ctx, point.x, point.y, text, {bg:'rgba(91,141,239,0.16)', border:'rgba(91,141,239,0.5)'});
+        drawCallout(ctx, point.x, point.y, text);
         lastRight = left + w;
       });
     }
@@ -797,10 +798,10 @@ function renderDashboard(DATA){
     data:{
       labels: cashLabels,
       datasets:[
-        { label: latest.date, data: latestCash, borderColor: COLORS.blue, backgroundColor: COLORS.blue,
-          pointRadius:4, pointBackgroundColor: 'transparent', pointBorderColor: COLORS.blue, pointBorderWidth:1.6, borderWidth:2.4, tension:0.3, order:1 },
-        prevCash ? { label: prev.date, data: prevCash, borderColor: COLORS.amber, backgroundColor:'transparent',
-          pointRadius:4, pointBackgroundColor:'transparent', pointBorderColor: COLORS.amber, pointBorderWidth:1.6,
+        { label: latest.date, data: latestCash, borderColor: COLORS.amber, backgroundColor: COLORS.amber,
+          pointRadius:4, pointBackgroundColor: 'transparent', pointBorderColor: COLORS.amber, pointBorderWidth:1.6, borderWidth:2.4, tension:0.3, order:1 },
+        prevCash ? { label: prev.date, data: prevCash, borderColor: COLORS.blue, backgroundColor:'transparent',
+          pointRadius:4, pointBackgroundColor:'transparent', pointBorderColor: COLORS.blue, pointBorderWidth:1.6,
           borderWidth:1.3, tension:0.3, order:2 } : null,
         prev2Cash ? { label: prev2.date, data: prev2Cash, borderColor: COLORS.muted, backgroundColor:'transparent',
           pointRadius:4, pointBackgroundColor:'transparent', pointBorderColor: COLORS.muted, pointBorderWidth:1.6,
