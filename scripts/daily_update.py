@@ -12,6 +12,7 @@ Only the target workbook is modified.
 """
 import argparse, csv, datetime as dt, io, json, os, re, shutil, subprocess, sys, tempfile, time
 import urllib.request, urllib.error
+from zoneinfo import ZoneInfo
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from types import SimpleNamespace
@@ -22,6 +23,13 @@ import openpyxl  # noqa: E402
 
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
 TPE = dt.timezone(dt.timedelta(hours=8))
+# US Eastern time with automatic daylight-saving handling (EDT = UTC-4 in summer, EST = UTC-5 in winter).
+# Never hard-code a UTC offset for US market times: the same Taipei clock time is one hour earlier in New York
+# once US DST ends (e.g. 08:35 Taipei = 20:35 EDT but only 19:35 EST).
+ET = ZoneInfo('America/New_York')
+# Cboe publishes the final VIX-family closes and VX settlements after the 16:15 ET index close; do not trust
+# anything fetched before this ET time on the trading day A.
+US_FINAL_AFTER = dt.time(17, 0)
 SKIP = 10
 CLOSED = 11
 
@@ -97,6 +105,14 @@ def prev_weekday(d):
     while d.weekday() >= 5:
         d -= dt.timedelta(days=1)
     return d
+
+
+def us_data_ready(A, now=None):
+    """(ready, ready_at_ET): has the US session of day A been final long enough for Cboe's data to be trusted?
+    Uses real New York time, so it moves by an hour automatically when US DST starts / ends."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    ready_at = dt.datetime.combine(A, US_FINAL_AFTER, ET)
+    return now >= ready_at, ready_at
 
 
 def nyse_holiday(d):
@@ -203,7 +219,9 @@ def cboe_final_quote(sym, A):
     except Exception as e:  # noqa: BLE001
         log(f'WARN {sym} quote fallback unavailable: {e}')
         return None
-    if ltt.date() != A or ltt.hour < 16 or abs(close - cur) > 1e-9 or close <= 0:
+    # Cboe stamps last_trade_time in New York local time (no offset in the string)
+    ltt = ltt.astimezone(ET) if ltt.tzinfo else ltt.replace(tzinfo=ET)
+    if ltt.date() != A or ltt.time() < dt.time(16, 0) or abs(close - cur) > 1e-9 or close <= 0:
         log(f'WARN {sym} quote is not the final close of {A}: last_trade_time={ltt} close={close} current={cur}')
         return None
     return close
@@ -378,6 +396,9 @@ def mode_close(a, today):
     a5, az5 = ws['A5'].value.date(), ws['AZ5'].value.date()
     if a5 >= A or az5 >= today:
         raise Skip(f'already done (A5={a5}, AZ5={az5})')
+    ok, ready_at = us_data_ready(A, taipei_now(a.today).astimezone(dt.timezone.utc))
+    if not ok:
+        raise Skip(f'US data for {A} not final yet (ready after {ready_at:%Y-%m-%d %H:%M %Z}); a later run will pick it up')
     old = {c: ws[f'{c}5'].value for c in list('BCDEFGH') + list('MNOPQ') + ['BB']}
     fut, m1exp, hol = futures_for(A)
     if tw_row and hol:
@@ -473,6 +494,9 @@ def mode_plan(a, today):
         a5, az5, ba5 = ws['A5'].value.date(), ws['AZ5'].value.date(), ws['BA5'].value
         A = prev_weekday(today)
         need_close = not (a5 >= A or az5 >= today) and not (kind == 'holiday' and nyse_holiday(A))
+        if need_close and not us_data_ready(A, taipei_now(a.today).astimezone(dt.timezone.utc))[0]:
+            log(f'plan: US data for {A} not final yet (New York time)')
+            need_close = False
         late = taipei_now(a.today).time() >= dt.time(9, 0)
         need_open = real_today == today and kind == 'open' and late and (need_close or (az5 == today and ba5 in (None, '')))
         need = need_close or need_open
