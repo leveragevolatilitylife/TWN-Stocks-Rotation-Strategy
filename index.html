@@ -229,9 +229,10 @@ table.hist thead th{
 }
 table.hist thead th:first-child, table.hist td:first-child{text-align:left;}
 table.hist tbody td{padding:6px 10px;text-align:right;border-bottom:1px solid var(--line);}
-table.hist tbody td.tier-low{background:rgba(51,168,118,0.14);color:var(--green);}
-table.hist tbody td.tier-mid{background:rgba(217,164,65,0.12);color:var(--amber);}
-table.hist tbody td.tier-high{background:rgba(225,72,61,0.14);color:var(--red);}
+table.hist tbody td{color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.35);}
+table.hist tbody td.hold-on, table.hist tbody td.hold-off{text-align:center;}
+table.hist tbody td.hold-on{background:rgba(51,168,118,0.55);}
+table.hist tbody td.hold-off{background:rgba(217,164,65,0.55);}
 table.hist tbody tr:hover{background:var(--panel-2);}
 .badge{display:inline-block;padding:1px 6px;border-radius:2px;font-size:11px;}
 .badge.on{background:var(--green-dim);color:var(--green);}
@@ -450,10 +451,14 @@ const RISK_STEPS = (()=>{
     return a.map((v,k)=>Math.round(v+(b[k]-v)*u));
   });
 })();
-function riskBg(rank, bias){
-  if(rank===null || rank===undefined) return '';
+function riskRgb(rank, bias){
+  if(rank===null || rank===undefined) return null;
   const f = Math.max(0, Math.min(1, bias==='higher' ? rank : (1-rank)));
-  const c = RISK_STEPS[Math.min(9, Math.floor(f*10))];
+  return RISK_STEPS[Math.min(9, Math.floor(f*10))];
+}
+function riskBg(rank, bias){
+  const c = riskRgb(rank, bias);
+  if(!c) return '';
   return `background:rgba(${c[0]},${c[1]},${c[2]},0.62);border-color:rgba(${c[0]},${c[1]},${c[2]},0.9);`;
 }
 function tierClass(rank, bias){
@@ -936,15 +941,16 @@ function renderDashboard(DATA){
       segments.forEach(seg=>{
         if(!seg.hold) return;
         const x0 = xOf(parseDate(data[seg.startIdx].date).getTime());
-        const x1raw = xOf(parseDate(data[seg.endIdx].date).getTime()) + stepX;
+        // 區段終點 = 下一個交易日的起點（而不是「終點日 + 固定寬度」），週末/假日不會在區段間留下縫隙
+        const x1raw = (seg.endIdx + 1 < n) ? xOf(parseDate(data[seg.endIdx + 1].date).getTime()) : 1000;
         const x1 = Math.max(x1raw, x0 + 1);
         const rect = document.createElementNS(NS,'rect');
         rect.setAttribute('x', x0.toFixed(2));
         rect.setAttribute('y', 3);
-        rect.setAttribute('width', Math.max(0.6, x1-x0).toFixed(2));
+        rect.setAttribute('width', (Math.max(0.6, x1-x0) + 0.35).toFixed(2));   // 微幅重疊，避免相鄰區段間出現抗鋸齒細縫
         rect.setAttribute('height', 26);
-        rect.setAttribute('rx', 1.5);
         rect.setAttribute('class','seg');
+        rect.setAttribute('shape-rendering','crispEdges');
         rect.setAttribute('fill', seg.hold==='00631L' ? COLORS.green : COLORS.amber);
         rect.setAttribute('fill-opacity', seg.hold==='00631L' ? '0.85' : '0.8');
         svg.appendChild(rect);
@@ -1015,6 +1021,7 @@ function renderDashboard(DATA){
   /* ---------- historical table ---------- */
   const TABLE_COLS = [
     {key:'date', label:'日期'},
+    ...stratNames.map((n,i)=>({key:'strat'+i, label:n.replace(/\s*[（(].*$/,''), title:n, strat:i})),
     {key:'roll_yield_vx30_vix', label:'VX30:VIX RY%', pct:true, d:2, bias:'higher'},
     {key:'cash_vix_osc', label:'Cash VIX Oscillator', d:2, bias:'higher'},
     {key:'etf_ma60_open', label:'0050 60MA(開盤)', d:2},
@@ -1058,7 +1065,7 @@ function renderDashboard(DATA){
 
   const thead = document.getElementById('table-head');
   TABLE_COLS.forEach(c=>{
-    const th = document.createElement('th'); th.textContent = c.label; thead.appendChild(th);
+    const th = document.createElement('th'); th.textContent = c.label; if(c.title) th.title = c.title; thead.appendChild(th);
   });
 
   let filtered = rowsDesc;
@@ -1081,12 +1088,17 @@ function renderDashboard(DATA){
       let html = '';
       TABLE_COLS.forEach(c=>{
         if(c.key==='date'){ html += `<td>${r.date}</td>`; return; }
+        if(c.strat!==undefined){
+          const h = r.strat && r.strat[c.strat] ? r.strat[c.strat][0] : null;
+          html += `<td class="${h ? (h==='00631L'?'hold-on':'hold-off') : ''}">${h || '–'}</td>`;
+          return;
+        }
         const v = r[c.key];
         const text = c.pct ? fmtPct(v,c.d) : fmt(v,c.d);
         if(c.bias){
           const rank = percentileOf(c.key, v);
-          const cls = tierClass(rank, c.bias);
-          html += `<td class="${cls}">${text}</td>`;
+          const c10 = riskRgb(rank, c.bias);
+          html += c10 ? `<td style="background:rgba(${c10[0]},${c10[1]},${c10[2]},0.62)">${text}</td>` : `<td>${text}</td>`;
         } else {
           html += `<td>${text}</td>`;
         }
