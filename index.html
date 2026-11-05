@@ -543,6 +543,7 @@ function extractFromAOA(aoa){
       etf_ma60_prevclose:num(cell(r,55)), etf_ma60_open:num(cell(r,56)),
       etf_bias_prevclose:num(cell(r,57)), etf_bias_open:num(cell(r,58)),
       strat: STRAT_COLS.map(([hc,pc])=> [cell(r,hc), cell(r,pc)]),
+      az_date: fmtDate(cell(r,52)),   // AZ：該列策略持倉實際生效的台股交易日（當天）
     });
   }
 
@@ -890,6 +891,7 @@ function renderDashboard(DATA){
   const timelineTooltip = document.getElementById('timeline-tooltip');
   const timelineCursor = document.getElementById('timeline-cursor');
   let timelineData = [];
+  let timelineT0 = 0, timelineSpan = 1;
   let timelineSvgs = [];
 
   stratNames.forEach((name, idx)=>{
@@ -909,15 +911,19 @@ function renderDashboard(DATA){
     timelineSvgs.push(svg);
   });
 
+  // 持倉時間軸以「持倉當天」（AZ 欄的台股交易日）對照；缺值時退回 A 欄日期
+  const holdDate = r => r.az_date || r.date;
+
   function renderTimeline(data){
     timelineAxis.innerHTML = '';
     timelineData = data;
     timelineSvgs.forEach(svg=> svg.innerHTML = '');
     if(data.length===0) return;
 
-    const t0 = parseDate(data[0].date).getTime();
-    const t1 = parseDate(data[data.length-1].date).getTime();
+    const t0 = parseDate(holdDate(data[0])).getTime();
+    const t1 = parseDate(holdDate(data[data.length-1])).getTime();
     const span = Math.max(1, t1 - t0);
+    timelineT0 = t0; timelineSpan = span;
     const xOf = t => (t - t0) / span * 1000;
     const n = data.length;
     const stepX = 1000 / n;
@@ -940,9 +946,9 @@ function renderDashboard(DATA){
 
       segments.forEach(seg=>{
         if(!seg.hold) return;
-        const x0 = xOf(parseDate(data[seg.startIdx].date).getTime());
+        const x0 = xOf(parseDate(holdDate(data[seg.startIdx])).getTime());
         // 區段終點 = 下一個交易日的起點（而不是「終點日 + 固定寬度」），週末/假日不會在區段間留下縫隙
-        const x1raw = (seg.endIdx + 1 < n) ? xOf(parseDate(data[seg.endIdx + 1].date).getTime()) : 1000;
+        const x1raw = (seg.endIdx + 1 < n) ? xOf(parseDate(holdDate(data[seg.endIdx + 1])).getTime()) : 1000;
         const x1 = Math.max(x1raw, x0 + 1);
         const rect = document.createElementNS(NS,'rect');
         rect.setAttribute('x', x0.toFixed(2));
@@ -997,7 +1003,15 @@ function renderDashboard(DATA){
     if(timelineData.length===0 || timelineSvgs.length===0) return;
     const rect = timelineSvgs[0].getBoundingClientRect();
     const relX = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    const idx = Math.max(0, Math.min(timelineData.length-1, Math.round(relX * (timelineData.length-1))));
+    // 以滑鼠位置對應的實際日期，找出「持倉當天」最接近的那一筆（橫軸是依日期排列，不是依筆數）
+    const tHover = timelineT0 + relX * timelineSpan;
+    let lo = 0, hi = timelineData.length - 1;
+    while(lo < hi){
+      const mid = (lo + hi) >> 1;
+      if(parseDate(holdDate(timelineData[mid])).getTime() < tHover) lo = mid + 1; else hi = mid;
+    }
+    let idx = lo;
+    if(idx > 0 && Math.abs(parseDate(holdDate(timelineData[idx-1])).getTime() - tHover) <= Math.abs(parseDate(holdDate(timelineData[idx])).getTime() - tHover)) idx = idx - 1;
     const r = timelineData[idx];
     const wrapRect = timelineWrap.getBoundingClientRect();
     const px = rect.left - wrapRect.left + relX * rect.width;
@@ -1009,7 +1023,7 @@ function renderDashboard(DATA){
       const h = r.strat[i] ? r.strat[i][0] : null;
       return name + '：' + (h || '尚無資料');
     });
-    timelineTooltip.innerHTML = '<b>' + r.date + '</b><br>' + lines.join('<br>');
+    timelineTooltip.innerHTML = '<b>' + holdDate(r) + '（當天持倉）</b><br>' + lines.join('<br>');
   }
   function timelineLeave(){
     timelineCursor.style.opacity = 0;
@@ -1021,7 +1035,7 @@ function renderDashboard(DATA){
   /* ---------- historical table ---------- */
   const TABLE_COLS = [
     {key:'date', label:'日期'},
-    ...stratNames.map((n,i)=>({key:'strat'+i, label:n.replace(/\s*[（(].*$/,''), title:n, strat:i})),
+    ...stratNames.map((n,i)=>({key:'strat'+i, label:n.replace(/\s*[（(].*$/,'') + '（隔日）', title:n + '：該列日期收盤後的訊號，為「隔日」台股持倉', strat:i})),
     {key:'roll_yield_vx30_vix', label:'VX30:VIX RY%', pct:true, d:2, bias:'higher'},
     {key:'cash_vix_osc', label:'Cash VIX Oscillator', d:2, bias:'higher'},
     {key:'etf_ma60_open', label:'0050 60MA(開盤)', d:2},
