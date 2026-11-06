@@ -425,7 +425,7 @@ def mode_close(a, today):
         if not isinstance(v, (int, float)) or v < 0:
             raise Fail(f'bad value {k}={v}')
     for c in 'MNOPQ':
-        if not 5 <= vals[c] <= 90:
+        if not 5 <= vals[c] <= 200:   # VIX peaked at 89.5 (2008); short-dated indices (VIX9D) can be even higher
             raise Fail(f'{c}={vals[c]} out of range')
     # Futures may legitimately jump a lot in a volatility spike (e.g. VIX +70% in one session), so the allowed
     # day-over-day move scales with the move of the VIX index itself: max(25%, 1.5 x |VIX move|), never above 100%.
