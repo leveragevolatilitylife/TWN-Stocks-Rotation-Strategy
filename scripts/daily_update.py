@@ -30,6 +30,7 @@ ET = ZoneInfo('America/New_York')
 # Cboe publishes the final VIX-family closes and VX settlements after the 16:15 ET index close; do not trust
 # anything fetched before this ET time on the trading day A.
 US_FINAL_AFTER = dt.time(17, 0)
+TW_LIMIT = 0.105   # TWSE ±10% daily limit + slack: larger gaps than this are bad data, smaller ones can be a real crash
 SKIP = 10
 CLOSED = 11
 
@@ -426,12 +427,17 @@ def mode_close(a, today):
     for c in 'MNOPQ':
         if not 5 <= vals[c] <= 90:
             raise Fail(f'{c}={vals[c]} out of range')
+    # Futures may legitimately jump a lot in a volatility spike (e.g. VIX +70% in one session), so the allowed
+    # day-over-day move scales with the move of the VIX index itself: max(25%, 1.5 x |VIX move|), never above 100%.
+    vix_move = abs(vals['N'] / float(old['N']) - 1) if old.get('N') else 0.0
+    fut_limit = min(1.0, max(0.25, 1.5 * vix_move))
     for c in 'BCDEFGH':
         o = old[c]
-        if o and abs(vals[c] / float(o) - 1) > 0.25:
-            raise Fail(f'{c}: {vals[c]} deviates >25% from previous {o}')
-    if old['BB'] and abs(bb / float(old['BB']) - 1) > 0.08:
-        raise Fail(f'BB {bb} deviates >8% from previous {old["BB"]}')
+        if o and abs(vals[c] / float(o) - 1) > fut_limit:
+            raise Fail(f'{c}: {vals[c]} deviates >{fut_limit:.0%} from previous {o} (VIX moved {vix_move:.0%})')
+    # TWSE daily price limit is 10%, so only a move beyond that (plus a little slack) can be bad data
+    if old['BB'] and abs(bb / float(old['BB']) - 1) > TW_LIMIT:
+        raise Fail(f'BB {bb} deviates >{TW_LIMIT:.1%} from previous {old["BB"]}')
     if not 0 <= K <= 45:
         raise Fail(f'K={K} out of range')
     log(f'A={A} az={today} holiday={hol} K={K} {vals}')
@@ -465,8 +471,8 @@ def mode_open(a, today):
         # unscheduled Taiwan closure (typhoon ...) but the US session happened: keep the row, open = previous close
         o = bb
         log(f'{today}: Taiwan market did not open; BA filled with the previous close {bb}')
-    if not o > 0 or abs(o / bb - 1) > 0.08:
-        raise Fail(f'open {o} deviates >8% from previous close {bb}')
+    if not o > 0 or abs(o / bb - 1) > TW_LIMIT:
+        raise Fail(f'open {o} deviates >{TW_LIMIT:.1%} from previous close {bb}')
     tmp = str(Path(a.file).with_suffix('.new.xlsx'))
     daily_row.cmd_set(SimpleNamespace(src=a.file, dst=tmp, expect_az=today.isoformat(), set=[f'BA={o}']))
     recalc(tmp)
