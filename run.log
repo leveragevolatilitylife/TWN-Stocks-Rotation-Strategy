@@ -1,0 +1,8 @@
+WARN 0050 close differs on 2026-11-06: TWSE 92.5 vs Yahoo 92.30000305175781; using TWSE
+0050 previous close 92.5 on 2026-11-06
+A=2026-11-06 az=2026-11-09 holiday=False K=11 {'B': 23.695, 'C': 22.184, 'D': 22.051, 'E': 21.936, 'F': 21.7, 'G': 21.777, 'H': 21.725, 'M': 27.18, 'N': 25.64, 'O': 24.6, 'P': 24.7, 'Q': 24.3, 'K': 11, 'BB': 92.5}
+inserted row 5: 2026-11-06 / 2026-11-09  {'B': '23.695', 'C': '22.184', 'D': '22.051', 'E': '21.936', 'F': '21.7', 'G': '21.777', 'H': '21.725', 'M': '27.18', 'N': '25.64', 'O': '24.6', 'P': '24.7', 'Q': '24.3', 'K': '11', 'BB': '92.5'}
+recalc ok: 4 known bottom errors; signals AK5=00635U AM5=00635U AO5=00635U AQ5=00635U AS5=00635U
+open step skipped: Taiwan market closed today
+audit skipped: audit not due
+DONE: inserted 2026-11-06/2026-11-09
