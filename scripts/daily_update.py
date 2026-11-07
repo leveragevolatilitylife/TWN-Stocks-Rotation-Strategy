@@ -263,7 +263,11 @@ def prev_close_0050(today):
     try:
         y = yahoo_0050().get(d)
         if y and y['close'] is not None and abs(y['close'] - c) > 0.011:
-            raise Fail(f'0050 close mismatch on {d}: TWSE {c} vs Yahoo {y["close"]}')
+            # TWSE is the official close; Yahoo's daily bar is sometimes a few ticks off (e.g. 2026-11-06: TWSE 92.5,
+            # Yahoo 92.3, confirmed 92.5 elsewhere). Only a large gap suggests a broken TWSE response.
+            if abs(y['close'] / c - 1) > 0.01:
+                raise Fail(f'0050 close mismatch on {d}: TWSE {c} vs Yahoo {y["close"]}')
+            log(f'WARN 0050 close differs on {d}: TWSE {c} vs Yahoo {y["close"]}; using TWSE')
     except Fail:
         raise
     except Exception as e:  # noqa: BLE001
