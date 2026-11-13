@@ -360,7 +360,8 @@ footer p{margin:4px 0;}
     </div>
     <div class="chart-box">
       <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">0050 60MA &amp; BIAS</div>
-      <div class="chart-inner tall"><canvas id="chart-etfbias"></canvas></div>
+      <div class="chart-inner" style="height:230px"><canvas id="chart-etfma"></canvas></div>
+      <div class="chart-inner" style="height:150px;margin-top:6px"><canvas id="chart-etfbias"></canvas></div>
     </div>
     <div class="chart-box">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:10px;">
@@ -861,25 +862,40 @@ function renderDashboard(DATA){
     }
   });
 
-  // 0050 60MA & BIAS — combined bar (bias%) + two price lines (close N-1, 60MA), dual axis.
-  // Mirrors the "0050乖離率" chart native to the source workbook.
-  const chartEtfBias = newChart('chart-etfbias', {
+  // 0050 60MA & BIAS — 上圖：收盤價(N-1)與60MA兩條價格曲線；下圖：乖離率單獨成一個副圖。
+  // 兩圖的 Y 軸寬度固定相同，讓兩張圖的 X 軸（日期）上下對齊。
+  const Y_AXIS_W = 56;
+  const fixAxisWidth = { afterFit(scale){ scale.width = Y_AXIS_W; } };
+  const chartEtfMa = newChart('chart-etfma', {
+    type:'line',
     data:{ labels:[], datasets:[
-      { type:'bar', label:'0050季線乖離（基於當日開盤）', data:[], yAxisID:'yPct',
-        backgroundColor: ctx => { const v=ctx.raw && ctx.raw.y; return (v!==null && v!==undefined && v<0) ? COLORS.red : COLORS.green; },
-        borderWidth:0, barPercentage:1.0, categoryPercentage:1.0 },
-      { type:'line', label:'0050 close price (N-1)', data:[], yAxisID:'yPrice',
+      { label:'0050 close price (N-1)', data:[],
         borderColor:COLORS.blue, backgroundColor:COLORS.blue, borderWidth:1.4, pointRadius:0, tension:0.15 },
-      { type:'line', label:'0050 60MA（基於當日開盤）', data:[], yAxisID:'yPrice',
+      { label:'0050 60MA（基於當日開盤）', data:[],
         borderColor:'#eeece4', backgroundColor:'#eeece4', borderWidth:1.8, pointRadius:0, tension:0.15 },
     ]},
     options:{
       animation:false, maintainAspectRatio:false,
-      plugins:{ legend:{labels:{color:COLORS.muted, font:{family:"ui-monospace", size:11}}}, title:{display:true,text:'0050 60MA & BIAS',color:COLORS.muted,font:{family:"-apple-system",size:12}} },
+      plugins:{ legend:{labels:{color:COLORS.muted, font:{family:"ui-monospace", size:11}}}, title:{display:true,text:'0050 收盤價 & 60MA',color:COLORS.muted,font:{family:"-apple-system",size:12}} },
       scales:{
-        x:{type:'time', time:{unit:'year'}, grid:{color:COLORS.line}, ticks:{color:COLORS.muted} },
-        yPct:{ position:'left', grid:{color:COLORS.line}, ticks:{color:COLORS.muted, callback:v=>(v*100).toFixed(0)+'%'} },
-        yPrice:{ position:'right', grid:{display:false}, ticks:{color:COLORS.muted} }
+        x:{type:'time', time:{unit:'year'}, grid:{color:COLORS.line}, ticks:{display:false} },
+        y:{ position:'left', grid:{color:COLORS.line}, ticks:{color:COLORS.muted}, ...fixAxisWidth }
+      }
+    }
+  });
+  const chartEtfBias = newChart('chart-etfbias', {
+    type:'bar',
+    data:{ labels:[], datasets:[
+      { label:'0050季線乖離（基於當日開盤）', data:[],
+        backgroundColor: ctx => { const v=ctx.raw && ctx.raw.y; return (v!==null && v!==undefined && v<0) ? COLORS.red : COLORS.green; },
+        borderWidth:0, barPercentage:1.0, categoryPercentage:1.0 },
+    ]},
+    options:{
+      animation:false, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, title:{display:true,text:'0050 季線乖離率（%）',color:COLORS.muted,font:{family:"-apple-system",size:12}} },
+      scales:{
+        x:{type:'time', offset:false, time:{unit:'year'}, grid:{color:COLORS.line}, ticks:{color:COLORS.muted} },
+        y:{ position:'left', grid:{color:c=>c.tick && c.tick.value===0 ? 'rgba(238,236,228,0.45)' : COLORS.line}, ticks:{color:COLORS.muted, callback:v=>(v*100).toFixed(0)+'%'}, ...fixAxisWidth }
       }
     }
   });
@@ -1163,10 +1179,18 @@ function renderDashboard(DATA){
     chartRY.data.datasets[1].data = data.map(r=>({x:r.date,y:r.roll_yield_vx30_vix}));
     chartRY.update();
 
+    // 兩張圖固定使用相同的 X 軸範圍（否則乖離率只有較晚才有資料，時間軸會自動縮短而與上圖錯位）
+    if(data.length){
+      const xMin = data[0].date, xMax = data[data.length-1].date;
+      [chartEtfMa, chartEtfBias].forEach(c=>{ c.options.scales.x.min = xMin; c.options.scales.x.max = xMax; });
+    }
+    chartEtfMa.data.labels = labels;
+    chartEtfMa.data.datasets[0].data = data.map(r=>({x:r.date,y:r.etf_prev_close}));
+    chartEtfMa.data.datasets[1].data = data.map(r=>({x:r.date,y:r.etf_ma60_open}));
+    chartEtfMa.update();
+
     chartEtfBias.data.labels = labels;
     chartEtfBias.data.datasets[0].data = data.map(r=>({x:r.date,y:r.etf_bias_open}));
-    chartEtfBias.data.datasets[1].data = data.map(r=>({x:r.date,y:r.etf_prev_close}));
-    chartEtfBias.data.datasets[2].data = data.map(r=>({x:r.date,y:r.etf_ma60_open}));
     chartEtfBias.update();
 
     renderTimeline(data);
