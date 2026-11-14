@@ -1,0 +1,8 @@
+VIX: history CSV lags (latest 2026-11-12), using final quote close 19.3 for 2026-11-13
+0050 previous close 102.5 on 2026-11-13
+A=2026-11-13 az=2026-11-16 holiday=False K=4 {'B': 19.108, 'C': 19.438, 'D': 20.189, 'E': 20.556, 'F': 20.798, 'G': 21.186, 'H': 21.3, 'M': 17.82, 'N': 19.3, 'O': 20.62, 'P': 22.03, 'Q': 22.85, 'K': 4, 'BB': 102.5}
+inserted row 5: 2026-11-13 / 2026-11-16  {'B': '19.108', 'C': '19.438', 'D': '20.189', 'E': '20.556', 'F': '20.798', 'G': '21.186', 'H': '21.3', 'M': '17.82', 'N': '19.3', 'O': '20.62', 'P': '22.03', 'Q': '22.85', 'K': '4', 'BB': '102.5'}
+recalc ok: 4 known bottom errors; signals AK5=00635U AM5=00635U AO5=00635U AQ5=00635U AS5=00635U
+open step skipped: Taiwan market closed today
+audit skipped: audit not due
+DONE: inserted 2026-11-13/2026-11-16
