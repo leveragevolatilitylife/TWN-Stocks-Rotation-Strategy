@@ -1182,7 +1182,7 @@ function renderDashboard(DATA){
   /* ---------- historical table ---------- */
   const TABLE_COLS = [
     {key:'date', label:'日期'},
-    ...stratNames.map((n,i)=>({key:'strat'+i, label:n.replace(/\s*[（(].*$/,'') + '（隔日）', title:n + '：該列日期收盤後的訊號，為「隔日」台股持倉', strat:i})),
+    ...STRAT_SHOW.map(i=>{ const n=stratNames[i]; return {key:'strat'+i, label:n.replace(/\s*[（(].*$/,'') + '（隔日）', title:n + '：該列日期收盤後的訊號，為「隔日」台股持倉', strat:i}; }),
     {key:'roll_yield_vx30_vix', label:'VX30:VIX RY%', pct:true, d:2, bias:'higher'},
     {key:'cash_vix_osc', label:'Cash VIX Oscillator', d:2, bias:'higher'},
     {key:'etf_ma60_open', label:'0050 60MA(開盤)', d:2},
