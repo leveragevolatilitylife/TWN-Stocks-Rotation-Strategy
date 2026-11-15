@@ -313,12 +313,12 @@ footer p{margin:4px 0;}
   <h2 class="section-title">策略邏輯說明</h2>
   <div class="logic-row logic-row-2">
     <div class="logic-card">
-      <div class="name">MARS+VRS Hybrid II</div>
-      <div class="desc">結合「MA Rotation II」與「VIX Rotation+BTD」兩組訊號，只要<b>任一組</b>訊號顯示 00631L 就持有 00631L（<b>OR</b> 條件），兩組訊號都轉為防禦時才持有 00635U。訊號較積極，00631L持倉比例較高，平均交易頻率~24天/次。</div>
-    </div>
-    <div class="logic-card">
       <div class="name">MARS+VRS Hybrid</div>
       <div class="desc">同樣結合「MA Rotation II」與「VIX Rotation+BTD」，但採<b>共識制</b>：兩組訊號一致時才換倉；若兩者不同調，則沿用前一交易日的持倉不變 (<b>HOLD</b> 條件)。訊號較有延續性，平均交易頻率~58天/次。</div>
+    </div>
+    <div class="logic-card">
+      <div class="name">MARS+VRS Hybrid II</div>
+      <div class="desc">結合「MA Rotation II」與「VIX Rotation+BTD」兩組訊號，只要<b>任一組</b>訊號顯示 00631L 就持有 00631L（<b>OR</b> 條件），兩組訊號都轉為防禦時才持有 00635U。訊號較積極，00631L持倉比例較高，平均交易頻率~24天/次。</div>
     </div>
   </div>
   <div class="logic-row logic-row-3">
@@ -738,6 +738,7 @@ function renderDashboard(DATA){
   const holdOf = idx => latest.strat[idx] ? latest.strat[idx][0] : null;
   const hMA2 = holdOf(4), hVIX = holdOf(2);
 
+  const STRAT_SHOW = [1,0,2,3,4];   // 顯示順序：Hybrid 在 Hybrid II 前面（資料欄位順序不變）
   const G = [];   // 依顯示順序：[row, card]
   // MARS+VRS Hybrid II / Hybrid：兩個子訊號（MA Rotation II、VIX Rotation+BTD）中，幾個是 00631L
   const nOn = (hMA2==='00631L'?1:0) + (hVIX==='00631L'?1:0);
@@ -767,7 +768,7 @@ function renderDashboard(DATA){
 
   [[0,'g2'],[1,'g3']].forEach(([rowNo,cls])=>{
     const rowEl = document.createElement('div'); rowEl.className = 'gauge-row '+cls;
-    G.filter(g=>g.row===rowNo).forEach(g=>{
+    G.filter(g=>g.row===rowNo).sort((x,y)=>STRAT_SHOW.indexOf(x.idx)-STRAT_SHOW.indexOf(y.idx)).forEach(g=>{
       const card = document.createElement('div'); card.className='gauge-card';
       const nm = document.createElement('div'); nm.className='g-name'; nm.textContent = stratNames[g.idx]; card.appendChild(nm);
       card.appendChild(g.svg);
@@ -785,7 +786,7 @@ function renderDashboard(DATA){
   if(ryRank!==null){ const calc = (ryNow>pr28 || ryNow<pr05) ? '00631L' : '00635U'; if(calc!==hVIX) console.warn('VIX Rotation gauge: computed', calc, 'vs workbook', hVIX); }
 
   // 經典卡片檢視
-  stratNames.forEach((name, idx)=>{
+  STRAT_SHOW.forEach(idx=>{ const name=stratNames[idx];
     const hold = latest.strat[idx] ? latest.strat[idx][0] : null, isOn = hold === '00631L';
     const card = document.createElement('div');
     card.className = 'strat-card ' + (hold ? (isOn?'on':'off') : '');
