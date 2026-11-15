@@ -125,6 +125,32 @@ h2.section-title span.hint{font-weight:400;font-size:12px;color:var(--muted-2);}
 .strat-card .ticker.off{color:var(--amber);}
 .strat-card .streak{font-size:11px;color:var(--muted-2);margin-top:6px;font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;}
 
+/* ---- strategy gauges (thermometer style) ---- */
+.gauge-row{display:grid;gap:10px;margin-bottom:10px;}
+.gauge-row:last-child{margin-bottom:0;}
+.gauge-row.g2{grid-template-columns:repeat(2,1fr);}
+.gauge-row.g3{grid-template-columns:repeat(3,1fr);}
+@media(max-width:900px){.gauge-row.g2,.gauge-row.g3{grid-template-columns:1fr;}}
+.gauge-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 15px 14px;}
+.gauge-card .g-name{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+.gauge-card svg{overflow:visible;width:100%;max-width:340px;display:block;margin:0 auto;}
+.gauge-card .g-pos{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:2px;}
+.gauge-card .g-pos .g-tk{font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;font-size:26px;font-weight:700;letter-spacing:.02em;line-height:1;}
+.gauge-card .g-pos .g-lbl{font-size:10.5px;letter-spacing:.12em;color:var(--muted-2);border:1px solid var(--line);border-radius:3px;padding:2px 6px;}
+.gauge-card .g-pos .g-sk{font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;font-size:11px;color:var(--muted);}
+.gauge-card .g-meta{font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;font-size:12px;color:var(--muted);text-align:center;line-height:1.7;margin-top:8px;}
+.gauge-card .g-meta b{color:#f4f1ea;font-weight:700;font-size:13px;}
+.gauge-card .g-rule{font-size:12px;color:var(--text);margin-top:8px;padding:6px 10px;background:var(--panel-2);border-left:3px solid #c9a688;border-radius:2px;line-height:1.6;}
+.gauge-card .g-rule b{color:#c9a688;font-weight:600;letter-spacing:.06em;margin-right:6px;}
+.gauge-card .g-chips{display:flex;gap:8px;justify-content:center;margin-top:8px;flex-wrap:wrap;}
+.gauge-card .g-chip{font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:3px 8px;color:var(--muted);}
+.gauge-card .g-chip b{font-weight:700;}
+.view-toggle{display:inline-flex;gap:6px;}
+.view-toggle button{background:transparent;border:1px solid var(--line);color:var(--muted);font-size:11.5px;padding:4px 11px;border-radius:2px;cursor:pointer;}
+.view-toggle button.active{background:var(--panel-2);color:var(--text);border-color:var(--muted-2);}
+
+[hidden]{display:none!important;}
+
 /* ---- strategy logic explainer cards ---- */
 .logic-row{display:grid;gap:10px;margin-bottom:10px;}
 .logic-row:last-child{margin-bottom:0;}
@@ -277,8 +303,10 @@ footer p{margin:4px 0;}
 <section id="sec-strategy">
   <h2 class="section-title">
        <span>策略訊號（<span id="strat-date-inline"></span> 當天台股建議持倉）</span>
+       <span class="view-toggle" id="strat-view-toggle"><button data-v="gauge" class="active">儀表</button><button data-v="card">卡片</button></span>
   </h2>
-  <div class="strat-grid" id="strat-grid"></div>
+  <div id="strat-gauges"></div>
+  <div class="strat-grid" id="strat-grid" hidden></div>
 </section> 
      
 <section id="sec-strategy-logic">
@@ -573,7 +601,7 @@ function newChart(canvasId, config){
 
 function renderDashboard(DATA){
   destroyCharts();
-  ['metric-grid','strat-grid','table-head','table-body','timeline-rows'].forEach(id=>{
+  ['metric-grid','strat-grid','strat-gauges','table-head','table-body','timeline-rows'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.innerHTML = '';
   });
@@ -651,25 +679,127 @@ function renderDashboard(DATA){
     grid.appendChild(card);
   });
 
-  /* ---------- strategy cards ---------- */
+  /* ---------- strategy signals: thermometer-style gauges ---------- */
   const stratGrid = document.getElementById('strat-grid');
-  stratNames.forEach((name, idx)=>{
-    const [hold] = latest.strat[idx];
-    const isOn = hold === '00631L';
-    let streak = 0;
-    for(const r of rowsDesc){
-      const h = r.strat[idx] ? r.strat[idx][0] : null;
-      if(h===hold) streak++; else break;
+  const gaugeBox = document.getElementById('strat-gauges');
+  const GC = {on:COLORS.green, off:COLORS.amber, hold:'#6f7686'};
+  const SW = `<i style="background:${GC.on}"></i>`, SA = `<i style="background:${GC.off}"></i>`, SH = `<i style="background:${GC.hold}"></i>`;
+  const holdColor = h => h==='00631L' ? GC.on : (h ? GC.off : GC.hold);
+  const NSg = 'http://www.w3.org/2000/svg';
+  function sEl(tag, attrs, text){ const e=document.createElementNS(NSg,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); if(text!=null) e.textContent=text; return e; }
+  const gPolar = (cx,cy,r,f)=>{ const a=Math.PI*(1-f); return [cx+r*Math.cos(a), cy-r*Math.sin(a)]; };
+  const gArc = (cx,cy,r,f0,f1)=>{ const p0=gPolar(cx,cy,r,f0), p1=gPolar(cx,cy,r,f1); return `M${p0[0].toFixed(2)} ${p0[1].toFixed(2)} A${r} ${r} 0 0 1 ${p1[0].toFixed(2)} ${p1[1].toFixed(2)}`; };
+  // zones:[{to,color,label?}] 依序鋪滿 0→1；ticks:[{f,label}]；needle: 0~1 或 null
+  let gaugeSeq=0;
+  function buildGauge(o){
+    const svg = sEl('svg',{viewBox:'0 0 260 146','role':'img','aria-label':o.aria||''});
+    const cx=130, cy=124, R=92, W=17;
+    svg.appendChild(sEl('path',{d:gArc(cx,cy,R+W/2+4,0,1),fill:'none',stroke:'#202532','stroke-width':1}));
+    let prev=0;
+    o.zones.forEach(z=>{
+      const act = true;   // 所有區段皆以亮色顯示
+      svg.appendChild(sEl('path',{d:gArc(cx,cy,R,prev+0.004,z.to-0.004),fill:'none',stroke:z.color,'stroke-width':W}));
+      if(z.label){ const mf=(prev+z.to)/2, m=gPolar(cx,cy,R+W/2+(mf<0.4||mf>0.6?7:9),mf); svg.appendChild(sEl('text',{x:m[0],y:m[1]+3,'text-anchor':mf<0.4?'end':(mf>0.6?'start':'middle'),'font-size':9.5,fill:'#e8e6df','font-weight':600,'font-family':'ui-monospace,monospace'},z.label)); }
+      prev=z.to;
+    });
+    (o.ticks||[]).forEach(t=>{
+      const p0=gPolar(cx,cy,R+W/2+2,t.f), p1=gPolar(cx,cy,R+W/2+9,t.f), tp=gPolar(cx,cy,R+W/2+19,t.f);
+      svg.appendChild(sEl('line',{x1:p0[0],y1:p0[1],x2:p1[0],y2:p1[1],stroke:'#ffffff','stroke-width':2.6}));
+      svg.appendChild(sEl('text',{x:tp[0],y:tp[1]+3.5,'text-anchor':'middle','font-size':10.5,'font-weight':700,fill:'#ffffff','font-family':'ui-monospace,monospace'},t.label));
+    });
+    if(o.needle!==null && o.needle!==undefined){
+      const f=Math.max(0,Math.min(1,o.needle)), ang=Math.PI*(1-f);
+      const L=R-W/2-2, bw=5, ux=Math.cos(ang), uy=-Math.sin(ang), px=-uy, py=ux;
+      const tip=[cx+L*ux, cy+L*uy], b1=[cx+bw*px, cy+bw*py], b2=[cx-bw*px, cy-bw*py];
+      const defs=sEl('defs',{}); const flt=sEl('filter',{id:'ng'+(gaugeSeq),x:'-50%',y:'-50%',width:'200%',height:'200%'});
+      flt.appendChild(sEl('feDropShadow',{dx:0,dy:0,stdDeviation:2.2,'flood-color':'#ffffff','flood-opacity':0.55})); defs.appendChild(flt); svg.appendChild(defs);
+      svg.appendChild(sEl('polygon',{points:`${tip[0].toFixed(1)},${tip[1].toFixed(1)} ${b1[0].toFixed(1)},${b1[1].toFixed(1)} ${b2[0].toFixed(1)},${b2[1].toFixed(1)}`,fill:'#ffffff',filter:`url(#ng${gaugeSeq})`}));
     }
+    gaugeSeq++;
+    svg.appendChild(sEl('circle',{cx:cx,cy:cy,r:10,fill:'#12141a',stroke:'#f4f1ea','stroke-width':2.4}));
+    svg.appendChild(sEl('circle',{cx:cx,cy:cy,r:3.6,fill:'#ffffff'}));
+    return svg;
+  }
+  // 非線性刻度（VIX Rotation 的 0.5% 區段太窄）：0~0.5%→0~0.06、0.5~28%→0.06~0.42、28~100%→0.42~1
+  const rankToF = r => r<=0.005 ? r/0.005*0.06 : (r<=0.28 ? 0.06+(r-0.005)/(0.28-0.005)*0.36 : 0.42+(r-0.28)/(0.72)*0.58);
+  const pctStr = (v,d=2)=> v===null||v===undefined||isNaN(v) ? '–' : (v*100).toFixed(d)+'%';
+  const streakOf = idx => { const h=latest.strat[idx] && latest.strat[idx][0]; let n=0; for(const r of rowsDesc){ const x=r.strat[idx]?r.strat[idx][0]:null; if(x===h) n++; else break; } return n; };
+
+  // VIX Rotation：最新一筆 VX30:VIX Roll Yield 在近 1000 日（含當日）的分位位置
+  const ryWin = rowsDesc.slice(0,1000).map(r=>r.roll_yield_vx30_vix).filter(v=>v!==null && v!==undefined);
+  const ryNow = latest.roll_yield_vx30_vix;
+  let ryRank = null, pr28 = null, pr05 = null;
+  if(ryNow!==null && ryNow!==undefined && ryWin.length>100){
+    const sorted = ryWin.slice().sort((a,b)=>a-b);
+    const q = p => { const pos=(sorted.length-1)*p, lo=Math.floor(pos), hi=Math.ceil(pos); return sorted[lo]+(sorted[hi]-sorted[lo])*(pos-lo); };
+    pr28 = q(0.28); pr05 = q(0.005);
+    ryRank = sorted.filter(v=>v<ryNow).length/(sorted.length-1);
+  }
+  const holdOf = idx => latest.strat[idx] ? latest.strat[idx][0] : null;
+  const hMA2 = holdOf(4), hVIX = holdOf(2);
+
+  const G = [];   // 依顯示順序：[row, card]
+  // MARS+VRS Hybrid II / Hybrid：兩個子訊號（MA Rotation II、VIX Rotation+BTD）中，幾個是 00631L
+  const nOn = (hMA2==='00631L'?1:0) + (hVIX==='00631L'?1:0);
+  const comboNeedle = (nOn+0.5)/3;
+  const chips = `<div class="g-chips"><span class="g-chip">MA Rotation II <b style="color:${holdColor(hMA2)}">${hMA2||'–'}</b></span><span class="g-chip">VIX Rotation+BTD <b style="color:${holdColor(hVIX)}">${hVIX||'–'}</b></span></div>`;
+  G.push({row:0, idx:0, svg: buildGauge({aria:'MARS+VRS Hybrid II', needle:comboNeedle, center:holdOf(0)||'–', centerColor:holdColor(holdOf(0)),
+      zones:[{to:1/3,color:GC.off,label:'皆 00635U'},{to:2/3,color:GC.on,label:'任一 00631L'},{to:1,color:GC.on,label:'皆 00631L'}]}),
+      meta:`兩個子訊號中 <b>${nOn}</b> 個為 00631L`, rule:'OR 邏輯：任一為 00631L 即持 00631L，兩者皆 00635U 才持 00635U', extra:chips});
+  G.push({row:0, idx:1, svg: buildGauge({aria:'MARS+VRS Hybrid', needle:comboNeedle, center:holdOf(1)||'–', centerColor:holdColor(holdOf(1)),
+      zones:[{to:1/3,color:GC.off,label:'皆 00635U'},{to:2/3,color:GC.hold,label:'維持前日'},{to:1,color:GC.on,label:'皆 00631L'}]}),
+      meta:`兩個子訊號中 <b>${nOn}</b> 個為 00631L`, rule:'HOLD 邏輯：兩訊號相同則跟隨；不同時維持前一日持倉', extra:chips});
+  // VIX Rotation+BTD
+  G.push({row:1, idx:2, svg: buildGauge({aria:'VIX Rotation+BTD', needle: ryRank===null?null:rankToF(ryRank), center:holdOf(2)||'–', centerColor:holdColor(holdOf(2)),
+      zones:[{to:0.06,color:GC.on},{to:0.42,color:GC.off},{to:1,color:GC.on}],
+      ticks:[{f:0.06,label:'0.5'},{f:0.42,label:'28'}]}),
+      meta:`VX30:VIX Roll Yield <b>${pctStr(ryNow)}</b>（近1000日分位 <b>${ryRank===null?'–':(ryRank*100).toFixed(1)+'%'}</b>）`,
+      rule:`高於 PR28（${pctStr(pr28)}）或低於 PR0.5（${pctStr(pr05)}）→ 00631L；刻度為非線性分位（%）`});
+  // MA Rotation / MA Rotation II：乖離率，0%~20% 為 00631L
+  const biasF = b => b===null||b===undefined ? null : Math.max(0,Math.min(1,(b+0.20)/0.50));   // -20%~+30%
+  const maZones = [{to:0.4,color:GC.off},{to:0.8,color:GC.on},{to:1,color:GC.off}];
+  const maTicks = [{f:0.4,label:'0%'},{f:0.8,label:'20%'}];
+  G.push({row:1, idx:3, svg: buildGauge({aria:'MA Rotation', needle:biasF(latest.etf_bias_prevclose), center:holdOf(3)||'–', centerColor:holdColor(holdOf(3)), zones:maZones, ticks:maTicks}),
+      meta:`0050 季線乖離（前日收盤）<b>${pctStr(latest.etf_bias_prevclose)}</b>`, rule:'乖離率介於 0%～20%（收盤價 > 60MA 且乖離 < 20%）→ 隔日 00631L'});
+  const openReady = latest.etf_open!==null && latest.etf_open!==undefined && latest.etf_open>0;   // 開盤價未公布時，乖離率欄位只是空值算出的 -100%
+  G.push({row:1, idx:4, svg: buildGauge({aria:'MA Rotation II', needle:openReady?biasF(latest.etf_bias_open):null, center:holdOf(4)||'–', centerColor:holdColor(holdOf(4)), zones:maZones, ticks:maTicks}),
+      meta: openReady ? `0050 季線乖離（當日開盤）<b>${pctStr(latest.etf_bias_open)}</b>` : `0050 當日開盤價<b>尚未公布</b>（開盤後更新）`, rule:'乖離率介於 0%～20%（開盤價 > 60MA 且乖離 < 20%）→ 當日 00631L'});
+
+  [[0,'g2'],[1,'g3']].forEach(([rowNo,cls])=>{
+    const rowEl = document.createElement('div'); rowEl.className = 'gauge-row '+cls;
+    G.filter(g=>g.row===rowNo).forEach(g=>{
+      const card = document.createElement('div'); card.className='gauge-card';
+      const nm = document.createElement('div'); nm.className='g-name'; nm.textContent = stratNames[g.idx]; card.appendChild(nm);
+      card.appendChild(g.svg);
+      const hd = holdOf(g.idx);
+      const pos = document.createElement('div'); pos.className='g-pos';
+      pos.innerHTML = `<span class="g-lbl">持倉</span><span class="g-tk" style="color:${holdColor(hd)}">${hd||'–'}</span><span class="g-sk">連續 ${streakOf(g.idx)} 日</span>`; card.appendChild(pos);
+      const meta = document.createElement('div'); meta.className='g-meta'; meta.innerHTML = g.meta; card.appendChild(meta);
+      if(g.extra){ const w=document.createElement('div'); w.innerHTML=g.extra; card.appendChild(w.firstChild); }
+      const rule = document.createElement('div'); rule.className='g-rule'; rule.innerHTML='<b>規則</b>'+g.rule; card.appendChild(rule);
+      rowEl.appendChild(card);
+    });
+    gaugeBox.appendChild(rowEl);
+  });
+  // 自我檢查：用同一套分位規則推算 VIX Rotation 訊號，與 Excel 持倉不一致時只記錄在 console
+  if(ryRank!==null){ const calc = (ryNow>pr28 || ryNow<pr05) ? '00631L' : '00635U'; if(calc!==hVIX) console.warn('VIX Rotation gauge: computed', calc, 'vs workbook', hVIX); }
+
+  // 經典卡片檢視
+  stratNames.forEach((name, idx)=>{
+    const hold = latest.strat[idx] ? latest.strat[idx][0] : null, isOn = hold === '00631L';
     const card = document.createElement('div');
     card.className = 'strat-card ' + (hold ? (isOn?'on':'off') : '');
-    card.innerHTML = `
-      <div class="name">${name}</div>
-      <div class="ticker ${isOn?'on':'off'}">${hold||'–'}</div>
-      <div class="streak">已連續 ${streak} 個交易日</div>
-    `;
+    card.innerHTML = `<div class="name">${name}</div><div class="ticker ${isOn?'on':'off'}">${hold||'–'}</div><div class="streak">已連續 ${streakOf(idx)} 個交易日</div>`;
     stratGrid.appendChild(card);
   });
+  // 儀表 / 卡片 切換（記住偏好；storage 不可用時回到預設）
+  (function(){
+    const btns=[...document.querySelectorAll('#strat-view-toggle button')];
+    const apply=v=>{ gaugeBox.hidden=(v!=='gauge'); stratGrid.hidden=(v!=='card'); btns.forEach(b=>b.classList.toggle('active',b.dataset.v===v)); };
+    let v='gauge'; try{ v=localStorage.getItem('stratView')||'gauge'; }catch(e){}
+    apply(v);
+    btns.forEach(b=>b.addEventListener('click',()=>{ apply(b.dataset.v); try{localStorage.setItem('stratView',b.dataset.v);}catch(e){} }));
+  })();
 
   /* ---------- term structure charts ---------- */
   function drawCallout(ctx, x, y, text, opts){
