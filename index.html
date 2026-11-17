@@ -388,7 +388,7 @@ footer p{margin:4px 0;}
     </div>
     <div class="chart-box">
       <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">0050 60MA &amp; BIAS</div>
-      <div class="chart-inner" style="height:230px"><canvas id="chart-etfma"></canvas></div>
+      <div class="chart-inner" style="height:320px"><canvas id="chart-etfma"></canvas></div>
       <div class="chart-inner" style="height:150px;margin-top:6px"><canvas id="chart-etfbias"></canvas></div>
     </div>
     <div class="chart-box">
@@ -960,6 +960,24 @@ function renderDashboard(DATA){
   });
 
   /* ---------- history charts (VIX complex / Roll Yield / 0050 60MA & BIAS) ---------- */
+  // K 棒對齊 Excel 的價格基準：Excel 的 0050 歷史收盤價是還原過的（含配息），而 TWSE 日 K 是原始價，
+  // 兩者放在同一張圖會錯位。用 Excel「前日收盤價」逐日推出還原係數，同時套用到開高低收（近期未還原時係數為 1）。
+  const OHLC_ADJ = (function(){
+    if(!OHLC.length) return [];
+    const pcByDay = new Map(); rowsAsc.forEach(r=>{ const d=r.az_date||r.date; if(typeof r.etf_prev_close==='number' && r.etf_prev_close>0) pcByDay.set(d, r.etf_prev_close); });
+    // 逐日還原係數 g = Excel 前日收盤 ÷ TWSE 收盤；Excel 偶有個別日期的手key誤差，所以取前後各 10 天的中位數平滑，
+    // 並把非常接近 1 的係數直接視為 1（近期資料沒有還原差異）
+    const g = OHLC.map((k,i)=>{ const nxt=OHLC[i+1], pc = nxt ? pcByDay.get(nxt.date) : null; const v = pc ? pc/k.c : null; return (v && v>0.3 && v<1.2) ? v : null; });
+    const med = a=>{ const b=a.filter(x=>x!==null).sort((x,y)=>x-y); return b.length ? b[Math.floor(b.length/2)] : null; };
+    let last = 1;
+    const out = OHLC.map((k,i)=>{
+      let f = med(g.slice(Math.max(0,i-10), i+11)); if(f===null) f = last; last = f;
+      if(Math.abs(f-1)<0.005) f = 1;
+      return {date:k.date, o:k.o*f, h:k.h*f, l:k.l*f, c:k.c*f};
+    });
+    return out;
+  })();
+
   function sliceByDateRange(fromStr, toStr){
     return rowsAsc.filter(r => (!fromStr || r.date >= fromStr) && (!toStr || r.date <= toStr));
   }
@@ -999,17 +1017,54 @@ function renderDashboard(DATA){
   // 兩圖的 Y 軸寬度固定相同，讓兩張圖的 X 軸（日期）上下對齊。
   const Y_AXIS_W = 56;
   const fixAxisWidth = { afterFit(scale){ scale.width = Y_AXIS_W; } };
+  // K 棒：綠漲（收 ≥ 開）紅跌，影線為最高～最低；畫在格線之上、60MA 線之下
+  const candlePlugin = {
+    id:'candles',
+    beforeDatasetsDraw(chart){
+      const ds = chart.data.datasets[0]; if(!ds || !ds.candle || !ds.data.length) return;
+      const {ctx, chartArea:ca, scales:{x:xs,y:ys}} = chart, pts = ds.data;
+      const inView = pts.filter(p=>{ const px=xs.getPixelForValue(p.t); return px>=ca.left-2 && px<=ca.right+2; });
+      if(!inView.length) return;
+      const perBar = (ca.right-ca.left) / Math.max(1, inView.length);
+      const bw = Math.max(1, Math.min(14, perBar*0.78));
+      ctx.save(); ctx.beginPath(); ctx.rect(ca.left, ca.top, ca.right-ca.left, ca.bottom-ca.top); ctx.clip();
+      inView.forEach(p=>{
+        const x = Math.round(xs.getPixelForValue(p.t)) + 0.5, up = p.c >= p.o, col = up ? COLORS.green : COLORS.red;
+        const yo=ys.getPixelForValue(p.o), yc=ys.getPixelForValue(p.c), yh=ys.getPixelForValue(p.h), yl=ys.getPixelForValue(p.l);
+        ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, yh); ctx.lineTo(x, yl); ctx.stroke();
+        const top = Math.min(yo,yc), h = Math.max(1, Math.abs(yo-yc));
+        ctx.fillRect(Math.round(x - bw/2), top, Math.max(1,Math.round(bw)), h);
+      });
+      ctx.restore();
+    }
+  };
   const chartEtfMa = newChart('chart-etfma', {
     type:'line',
+    plugins:[candlePlugin],
     data:{ labels:[], datasets:[
       { label:'0050 close price (N-1)', data:[],
         borderColor:COLORS.blue, backgroundColor:COLORS.blue, borderWidth:1.4, pointRadius:0, tension:0.15 },
       { label:'0050 60MA（基於當日開盤）', data:[],
         borderColor:'#eeece4', backgroundColor:'#eeece4', borderWidth:1.8, pointRadius:0, tension:0.15 },
+      { label:'high', helper:true, data:[], borderColor:'transparent', backgroundColor:'transparent', pointRadius:0, borderWidth:0 },
+      { label:'low',  helper:true, data:[], borderColor:'transparent', backgroundColor:'transparent', pointRadius:0, borderWidth:0 },
     ]},
     options:{
       animation:false, maintainAspectRatio:false,
-      plugins:{ legend:{labels:{color:COLORS.muted, font:{family:"ui-monospace", size:11}}}, title:{display:true,text:'0050 收盤價 & 60MA',color:COLORS.muted,font:{family:"-apple-system",size:12}} },
+      plugins:{ legend:{labels:{color:COLORS.muted, font:{family:"ui-monospace", size:11},
+          filter:(it,data)=>!(data.datasets[it.datasetIndex]||{}).helper,
+          generateLabels(chart){ const items=Chart.defaults.plugins.legend.labels.generateLabels(chart); items.forEach(it=>{ const ds=chart.data.datasets[it.datasetIndex]; if(ds && ds.candle){ it.fillStyle=COLORS.green; it.strokeStyle=COLORS.red; it.lineWidth=2; } }); return items; } } },
+        title:{display:true,text:'0050 K 棒 & 60MA',color:COLORS.muted,font:{family:"-apple-system",size:12}},
+        tooltip:{ filter:(it)=>!(it.dataset||{}).helper,
+          callbacks:{ label(ctx){
+            const r=ctx.raw;
+            if(ctx.dataset.candle && r && r.o!==undefined){
+              const chg=(r.c/r.o-1)*100;
+              return [`開 ${r.o.toFixed(2)}　高 ${r.h.toFixed(2)}`,`低 ${r.l.toFixed(2)}　收 ${r.c.toFixed(2)}（${chg>=0?'+':''}${chg.toFixed(2)}%）`];
+            }
+            return `${ctx.dataset.label}: ${ctx.parsed.y===null?'–':ctx.parsed.y.toFixed(2)}`;
+          } } } },
       scales:{
         x:{type:'time', time:{unit:'year'}, grid:{color:COLORS.line}, ticks:{display:false} },
         y:{ position:'left', grid:{color:COLORS.line}, ticks:{color:COLORS.muted}, ...fixAxisWidth }
@@ -1329,16 +1384,37 @@ function renderDashboard(DATA){
 
     // 兩張圖固定使用相同的 X 軸範圍（否則乖離率只有較晚才有資料，時間軸會自動縮短而與上圖錯位）
     if(data.length){
-      const DAY=86400000, xMin = new Date(data[0].date).getTime()-DAY/2, xMax = new Date(data[data.length-1].date).getTime()+DAY/2;   // 兩側各留半天，避免邊緣長條被截斷
+      const DAY=86400000, dOf = r=>r.az_date||r.date;
+      const xMin = Math.min(new Date(dOf(data[0])).getTime(), new Date(data[0].date).getTime())-DAY/2;
+      const xMax = Math.max(new Date(dOf(data[data.length-1])).getTime(), new Date(data[data.length-1].date).getTime())+DAY/2;   // 兩側各留半天，避免邊緣長條被截斷
       [chartEtfMa, chartEtfBias].forEach(c=>{ c.options.scales.x.min = xMin; c.options.scales.x.max = xMax; });
     }
     chartEtfMa.data.labels = labels;
-    chartEtfMa.data.datasets[0].data = data.map(r=>({x:r.date,y:r.etf_prev_close}));
-    chartEtfMa.data.datasets[1].data = data.map(r=>({x:r.date,y:r.etf_ma60_open}));
+    // 60MA 與乖離率以「台股交易日」(AZ) 定位，才能與 K 棒、下方乖離率對齊
+    const taiwanDay = r=>r.az_date||r.date;
+    const lo = fromStr||data[0].date, hi = toStr||data[data.length-1].date;
+    const candles = OHLC_ADJ.filter(k=>k.date>=lo && k.date<=taiwanDay(data[data.length-1]));
+    const useCandle = candles.length>0;
+    const d0 = chartEtfMa.data.datasets[0];
+    if(useCandle){
+      d0.candle = true; d0.label = '0050 日K（綠漲／紅跌）';
+      d0.borderColor = d0.backgroundColor = 'transparent'; d0.borderWidth = 0;
+      d0.data = candles.map(k=>({x:k.date, y:k.c, t:new Date(k.date).getTime(), o:k.o, h:k.h, l:k.l, c:k.c}));
+      chartEtfMa.data.datasets[2].data = candles.map(k=>({x:k.date,y:k.h}));
+      chartEtfMa.data.datasets[3].data = candles.map(k=>({x:k.date,y:k.l}));
+      chartEtfMa.options.plugins.title.text = '0050 日K & 60MA';
+    } else {
+      d0.candle = false; d0.label = '0050 close price (N-1)';
+      d0.borderColor = d0.backgroundColor = COLORS.blue; d0.borderWidth = 1.4;
+      d0.data = data.map(r=>({x:r.date,y:r.etf_prev_close}));
+      chartEtfMa.data.datasets[2].data = []; chartEtfMa.data.datasets[3].data = [];
+      chartEtfMa.options.plugins.title.text = '0050 收盤價 & 60MA';
+    }
+    chartEtfMa.data.datasets[1].data = data.map(r=>({x:taiwanDay(r),y:r.etf_ma60_open}));
     chartEtfMa.update();
 
     chartEtfBias.data.labels = labels;
-    chartEtfBias.data.datasets[0].data = data.map(r=>({x:r.date,y:r.etf_bias_open}));
+    chartEtfBias.data.datasets[0].data = data.map(r=>({x:taiwanDay(r),y:r.etf_bias_open}));
     chartEtfBias.update();
 
     renderTimeline(data);
@@ -1415,13 +1491,22 @@ function showLoadError(msg){
 /* ---------- initial load: fetch the repo's data/latest.xlsx so every
    visitor sees the same, currently-published data ---------- */
 const DATA_URL = 'data/latest.xlsx';
+let OHLC = [];   // 0050 日 K：[{date:'YYYY-MM-DD', o,h,l,c}]，來自 data/0050_ohlc.csv（缺檔時退回折線圖）
+async function loadOhlc(){
+  try{
+    const res = await fetch('data/0050_ohlc.csv', {cache:'no-cache'});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const lines = (await res.text()).trim().split(/\r?\n/).slice(1);
+    OHLC = lines.map(l=>{ const [d,o,h,lo,c]=l.split(','); return {date:d, o:+o, h:+h, l:+lo, c:+c}; }).filter(r=>r.date && isFinite(r.o+r.h+r.l+r.c));
+  }catch(e){ console.warn('0050 K 棒資料載入失敗，改用折線圖：', e); OHLC = []; }
+}
 (async function init(){
   try{
     // 'no-cache' forces a freshness check on every load (so updates are
     // never missed) but still lets the browser reuse the cached file body
     // via a 304 when it hasn't changed — much faster than 'no-store',
     // which would re-download the full file every single time.
-    const res = await fetch(DATA_URL, {cache:'no-cache'});
+    const [res] = await Promise.all([fetch(DATA_URL, {cache:'no-cache'}), loadOhlc()]);
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const buf = await res.arrayBuffer();
     const data = parseWorkbookBuffer(buf);
