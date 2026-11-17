@@ -1,0 +1,46 @@
+# 0050 每日 OHLC（K 棒用）：抓 TWSE 日線寫入 data/0050_ohlc.csv。與 daily-update 互不影響（不動 data/latest.xlsx）。
+#   update   ：只抓本月與上月（排程用）
+#   backfill ：從指定月份起逐月補歷史（手動；約 10 分鐘）
+name: update-ohlc
+on:
+  schedule:            # UTC；台北 = UTC+8
+    - cron: '40 6 * * 1-5'    # 14:40（收盤後）
+    - cron: '10 11 * * 1-5'   # 19:10（備援）
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'update / backfill / validate'
+        default: 'update'
+      start:
+        description: 'backfill 起始月份 (YYYY-MM)'
+        default: '2015-01'
+permissions:
+  contents: write
+concurrency:
+  group: data-update
+  cancel-in-progress: false
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+jobs:
+  ohlc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install openpyxl
+      - name: fetch
+        run: |
+          MODE='${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'update' }}'
+          START='${{ github.event_name == 'workflow_dispatch' && inputs.start || '2015-01' }}'
+          if [ "$MODE" = "backfill" ]; then python3 scripts/ohlc_0050.py backfill --start "$START"; python3 scripts/ohlc_0050.py validate
+          elif [ "$MODE" = "validate" ]; then python3 scripts/ohlc_0050.py validate
+          else python3 scripts/ohlc_0050.py update; fi
+      - name: commit
+        run: |
+          git config user.name github-actions; git config user.email actions@github.com
+          git add data/0050_ohlc.csv
+          if git diff --cached --quiet; then echo "no change"; exit 0; fi
+          git commit -q -m "更新 0050 K 棒資料 ($(TZ=Asia/Taipei date +%F))"
+          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break || sleep 5; done
