@@ -558,6 +558,8 @@ function extractFromAOA(aoa){
   for(let r=5; r<=aoa.length; r++){
     const dateStr = fmtDate(cell(r,1));
     if(!dateStr) continue;
+    // 當日開盤價尚未填入時，表格的開盤乖離率為占位值（-100%），視為無資料，避免圖表出現巨大長條
+    const _op = num(cell(r,53)), _bo = num(cell(r,58)), openOk = _op!==null && _op>0 && _bo!==null && _bo>-0.999;
     rows.push({
       date: dateStr,
       m1:num(cell(r,2)), m2:num(cell(r,3)), m3:num(cell(r,4)), m4:num(cell(r,5)), m5:num(cell(r,6)), m6:num(cell(r,7)), m7:num(cell(r,8)),
@@ -569,8 +571,8 @@ function extractFromAOA(aoa){
       m1m2_futures:num(cell(r,24)), m4m7_futures:num(cell(r,25)), adj_m1m2_futures:num(cell(r,26)), vx30_m1m2:num(cell(r,27)),
       roll_yield_m1_vix:num(cell(r,28)), roll_yield_vx30_vix:num(cell(r,29)),
       etf_open:num(cell(r,53)), etf_prev_close:num(cell(r,54)),
-      etf_ma60_prevclose:num(cell(r,55)), etf_ma60_open:num(cell(r,56)),
-      etf_bias_prevclose:num(cell(r,57)), etf_bias_open:num(cell(r,58)),
+      etf_ma60_prevclose:num(cell(r,55)), etf_ma60_open:openOk?num(cell(r,56)):null,
+      etf_bias_prevclose:num(cell(r,57)), etf_bias_open:openOk?num(cell(r,58)):null,
       strat: STRAT_COLS.map(([hc,pc])=> [cell(r,hc), cell(r,pc)]),
       az_date: fmtDate(cell(r,52)),   // AZ：該列策略持倉實際生效的台股交易日（當天）
     });
@@ -1014,8 +1016,23 @@ function renderDashboard(DATA){
       }
     }
   });
+  // 長條寬度：每根從當天延伸到下一個交易日（休市／週末不留空隙），讓長條疏密一致
+  const biasContiguous = {
+    id:'biasContiguous',
+    beforeDatasetDraw(chart, args){
+      const meta = args.meta, xs = chart.scales.x; if(!meta || !xs) return;
+      const els = meta.data, ds = chart.data.datasets[args.index].data, n = els.length; if(n<2) return;
+      const px = ds.map(d=>xs.getPixelForValue(new Date(d.x).getTime()));
+      for(let i=0;i<n;i++){
+        const x0 = px[i], x1 = i<n-1 ? px[i+1] : x0 + (px[i]-px[i-1]);
+        const w = Math.max(1, x1 - x0 + 0.6);   // 微量重疊，避免抗鋸齒細縫
+        els[i].x = x0 + (x1-x0)/2; els[i].width = w;
+      }
+    }
+  };
   const chartEtfBias = newChart('chart-etfbias', {
     type:'bar',
+    plugins:[biasContiguous],
     data:{ labels:[], datasets:[
       { label:'0050季線乖離（基於當日開盤）', data:[],
         backgroundColor: ctx => { const v=ctx.raw && ctx.raw.y; return (v!==null && v!==undefined && v<0) ? COLORS.red : COLORS.green; },
@@ -1312,7 +1329,7 @@ function renderDashboard(DATA){
 
     // 兩張圖固定使用相同的 X 軸範圍（否則乖離率只有較晚才有資料，時間軸會自動縮短而與上圖錯位）
     if(data.length){
-      const xMin = data[0].date, xMax = data[data.length-1].date;
+      const DAY=86400000, xMin = new Date(data[0].date).getTime()-DAY/2, xMax = new Date(data[data.length-1].date).getTime()+DAY/2;   // 兩側各留半天，避免邊緣長條被截斷
       [chartEtfMa, chartEtfBias].forEach(c=>{ c.options.scales.x.min = xMin; c.options.scales.x.max = xMax; });
     }
     chartEtfMa.data.labels = labels;
