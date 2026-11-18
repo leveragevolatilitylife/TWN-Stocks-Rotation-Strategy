@@ -1097,7 +1097,7 @@ function renderDashboard(DATA){
       animation:false, maintainAspectRatio:false,
       plugins:{ legend:{display:false}, title:{display:true,text:'0050 季線乖離率（%）',color:COLORS.muted,font:{family:"-apple-system",size:12}} },
       scales:{
-        x:{type:'time', offset:false, time:{unit:'year'}, grid:{color:COLORS.line}, ticks:{color:COLORS.muted} },
+        x:{type:'time', offset:false, time:{unit:'year'}, grid:{color:COLORS.line, offset:false}, ticks:{color:COLORS.muted} },
         y:{ position:'left', grid:{color:c=>c.tick && c.tick.value===0 ? 'rgba(238,236,228,0.45)' : COLORS.line}, ticks:{color:COLORS.muted, callback:v=>(v*100).toFixed(0)+'%'}, ...fixAxisWidth }
       }
     }
@@ -1387,7 +1387,25 @@ function renderDashboard(DATA){
       const DAY=86400000, dOf = r=>r.az_date||r.date;
       const xMin = Math.min(new Date(dOf(data[0])).getTime(), new Date(data[0].date).getTime())-DAY/2;
       const xMax = Math.max(new Date(dOf(data[data.length-1])).getTime(), new Date(data[data.length-1].date).getTime())+DAY/2;   // 兩側各留半天，避免邊緣長條被截斷
-      [chartEtfMa, chartEtfBias].forEach(c=>{ c.options.scales.x.min = xMin; c.options.scales.x.max = xMax; });
+      // 橫軸刻度到「月份」：區間愈長，月份標籤間隔愈大（1 / 3 / 6 個月），超過約 6 年才退回只標年份
+      const spanDays = (xMax-xMin)/DAY;
+      const monthStep = spanDays<=420 ? 1 : spanDays<=1150 ? 3 : spanDays<=2300 ? 6 : 0;
+      [chartEtfMa, chartEtfBias].forEach(c=>{
+        const x = c.options.scales.x; x.min = xMin; x.max = xMax;
+        x.time = monthStep ? {unit:'month', stepSize:monthStep, displayFormats:{month:'yyyy-MM'}, tooltipFormat:'yyyy-MM-dd'} : {unit:'year', displayFormats:{year:'yyyy'}, tooltipFormat:'yyyy-MM-dd'};
+        // 月份用英文縮寫（Jan、Feb…），年份放在第二行，只在每年 1 月與第一個刻度標出
+        const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        // 刻度固定落在 1 月起算的整數倍月份（步長 1/3/6 → 每月／1、4、7、10 月／1、7 月），確保每年 1 月一定有刻度可標年份
+        x.afterBuildTicks = monthStep ? function(scale){
+          const t=[]; const d0=new Date(xMin), d=new Date(d0.getFullYear(), d0.getMonth(), 1);
+          if(d.getTime()<xMin) d.setMonth(d.getMonth()+1);
+          for(; d.getTime()<=xMax; d.setMonth(d.getMonth()+1)) if(d.getMonth()%monthStep===0) t.push({value:d.getTime()});
+          scale.ticks = t;
+        } : undefined;
+        x.ticks = Object.assign({}, x.ticks, {source:'auto', autoSkip:false, maxRotation:0, color:COLORS.muted,
+          callback: monthStep ? function(v, i){ const d=new Date(v); return (d.getMonth()===0 || i===0) ? [MON[d.getMonth()], String(d.getFullYear())] : MON[d.getMonth()]; } : undefined});
+      });
+      chartEtfMa.options.scales.x.ticks.display = false;   // 上圖只留格線，標籤顯示在下方乖離率圖
     }
     chartEtfMa.data.labels = labels;
     // 60MA 與乖離率以「台股交易日」(AZ) 定位，才能與 K 棒、下方乖離率對齊
