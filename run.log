@@ -1,0 +1,7 @@
+0050 previous close 84.45 on 2026-11-20
+A=2026-11-20 az=2026-11-23 holiday=False K=25 {'B': 28.458, 'C': 26.246, 'D': 25.386, 'E': 24.672, 'F': 24.308, 'G': 23.978, 'H': 23.723, 'M': 40.72, 'N': 35.89, 'O': 30.94, 'P': 29.54, 'Q': 27.57, 'K': 25, 'BB': 84.45}
+inserted row 5: 2026-11-20 / 2026-11-23  {'B': '28.458', 'C': '26.246', 'D': '25.386', 'E': '24.672', 'F': '24.308', 'G': '23.978', 'H': '23.723', 'M': '40.72', 'N': '35.89', 'O': '30.94', 'P': '29.54', 'Q': '27.57', 'K': '25', 'BB': '84.45'}
+recalc ok: 4 known bottom errors; signals AK5=00635U AM5=00635U AO5=00635U AQ5=00635U AS5=00635U
+open step skipped: Taiwan market closed today
+audit skipped: audit not due
+DONE: inserted 2026-11-20/2026-11-23
