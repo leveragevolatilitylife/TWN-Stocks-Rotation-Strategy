@@ -170,6 +170,7 @@ h2.section-title span.hint{font-weight:400;font-size:12px;color:var(--muted-2);}
 .logic-card .name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;}
 .logic-card .desc{font-size:12px;color:var(--muted);line-height:1.7;}
 .logic-card .desc b{color:var(--text);font-weight:600;}
+.logic-card .desc b.upd,.gauge-card .g-rule b.upd{color:#e8b86d;font-weight:700;letter-spacing:0;margin-right:0;}
 .backtest-note{font-size:12px;color:var(--muted);margin-top:14px;}
 .backtest-note a{color:var(--blue);}
 
@@ -314,7 +315,7 @@ footer p{margin:4px 0;}
   <div class="logic-row logic-row-2">
     <div class="logic-card">
       <div class="name">MARS+VRS Hybrid</div>
-      <div class="desc">同樣結合「MA Rotation II」與「VIX Rotation+BTD」，但採<b>共識制</b>：兩組訊號一致時才換倉；若兩者不同調，則沿用前一交易日的持倉不變 (<b>HOLD</b> 條件)。訊號較有延續性，平均交易頻率~58天/次。</div>
+      <div class="desc">同樣結合「MA Rotation II」與「VIX Rotation+BTD」，但採<b>共識制</b>：兩組訊號一致時才換倉；若兩者不同調，則沿用前一交易日的持倉不變 (<b>HOLD</b> 條件)。<b class="upd">【2026-11-21 改進：併入 BTD 特例】當「VIX Rotation+BTD」的 VX30:VIX Roll Yield 跌破近 1000 個交易日 PR0.5（極端恐慌低點、非高位多方）時，該日不再受 HOLD 限制，直接視為 00631L（抄底）並成為隔日 HOLD 的「前一日持倉」，隔日起恢復原本共識制。原本即使 VIX 已進入極端低點，只要 MA Rotation II 仍看空就會被 HOLD 擋住；回測（2014-11 起）CAGR 34.1%→37.4%、Sharpe 1.16→1.20、最大回撤不變（-36.2%），改善幅度小、統計上未達顯著，屬保守的小幅優化。</b>訊號較有延續性，平均交易頻率~54天/次（併入 BTD 特例後，原~58天/次）。</div>
     </div>
     <div class="logic-card">
       <div class="name">MARS+VRS Hybrid II</div>
@@ -751,7 +752,7 @@ function renderDashboard(DATA){
       meta:`兩個子訊號中 <b>${nOn}</b> 個為 00631L`, rule:'OR 邏輯：任一為 00631L 即持 00631L，兩者皆 00635U 才持 00635U', extra:chips});
   G.push({row:0, idx:1, svg: buildGauge({aria:'MARS+VRS Hybrid', needle:comboNeedle, center:holdOf(1)||'–', centerColor:holdColor(holdOf(1)),
       zones:[{to:1/3,color:GC.off,label:'皆 00635U'},{to:2/3,color:GC.hold,label:'維持前日'},{to:1,color:GC.on,label:'皆 00631L'}]}),
-      meta:`兩個子訊號中 <b>${nOn}</b> 個為 00631L`, rule:'HOLD 邏輯：兩訊號相同則跟隨；不同時維持前一日持倉', extra:chips});
+      meta:`兩個子訊號中 <b>${nOn}</b> 個為 00631L`, rule:'HOLD 邏輯：兩訊號相同則跟隨；不同時維持前一日持倉。<b class="upd">（2026-11-21 改進）BTD 特例：VX30:VIX Roll Yield 低於 PR0.5 的抄底日，不論均線訊號一律持 00631L</b>', extra:chips});
   // VIX Rotation+BTD
   G.push({row:1, idx:2, svg: buildGauge({aria:'VIX Rotation+BTD', needle: ryRank===null?null:rankToF(ryRank), center:holdOf(2)||'–', centerColor:holdColor(holdOf(2)),
       zones:[{to:0.06,color:GC.on},{to:0.42,color:GC.off},{to:1,color:GC.on}],
