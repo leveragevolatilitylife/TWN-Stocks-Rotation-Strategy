@@ -475,6 +475,11 @@ def mode_open(a, today):
         raise Skip('Taiwan market closed today')
     ws = load_row5(a.file)
     if ws['AZ5'].value.date() != today:
+        # 收盤列是等 Cboe 歷史檔補上美股當天資料後才產生的；美股收盤後 15 小時內還沒有，開盤步驟也先略過，等下次排程
+        A = prev_weekday(today)
+        _, ready_at = us_data_ready(A)
+        if dt.datetime.now(dt.timezone.utc) < ready_at.astimezone(dt.timezone.utc) + dt.timedelta(hours=15):
+            raise Skip(f'today\'s row not created yet (US data for {A} still pending); open step will run later')
         raise Fail(f'AZ5={ws["AZ5"].value} is not today; the close step has not produced today\'s row')
     if ws['BA5'].value not in (None, ''):
         raise Skip('BA5 already filled')
