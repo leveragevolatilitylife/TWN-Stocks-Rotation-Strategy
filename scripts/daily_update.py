@@ -415,6 +415,11 @@ def mode_close(a, today):
     for sym, col in zip(['VIX9D', 'VIX', 'VIX3M', 'VIX6M', 'VIX1Y'], 'MNOPQ'):
         d, v = cboe_index_close(sym, A)
         if not hol and d != A:
+            # Cboe 的歷史檔通常在美股收盤後數小時才補上當天；收盤後 15 小時內還沒有 → 視為「尚未發布」，
+            # 這次略過、讓下一次排程再試（不寄失敗通知）；超過仍沒有才算真的異常。
+            now_utc = taipei_now(a.today).astimezone(dt.timezone.utc)
+            if now_utc < ready_at.astimezone(dt.timezone.utc) + dt.timedelta(hours=15):
+                raise Skip(f'{sym} history not published yet for {A} (latest {d}); a later run will pick it up')
             raise Fail(f'{sym} history has no row for {A} (latest {d})')
         idx[col] = v
     bb, bbday = prev_close_0050(today)
