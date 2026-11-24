@@ -1,9 +1,9 @@
-# 每個台股交易日 09:30（台北）用 ntfy 推播五個策略的當日持倉。
+# 每個台股交易日 09:20（台北）用 ntfy 推播五個策略的當日持倉。
 # 需要在 repo 的 Settings → Secrets and variables → Actions 新增 secret：NTFY_TOPIC（你自己取的、別人猜不到的主題名稱）。
 name: notify-ntfy
 on:
   schedule:
-    - cron: '30 1 * * 1-5'     # UTC 01:30 = 台北 09:30（週一到週五；台股休市日腳本會自行略過）
+    - cron: '20 1 * * 1-5'     # UTC 01:20 = 台北 09:20（週一到週五；台股休市日腳本會自行略過）
   workflow_dispatch:
     inputs:
       force:
