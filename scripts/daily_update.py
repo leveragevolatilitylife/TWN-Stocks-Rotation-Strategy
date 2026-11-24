@@ -10,7 +10,7 @@
 Exit codes: 0 = updated, 10 = nothing to do (weekend / holiday / already done), 1 = failure (nothing written).
 Only the target workbook is modified.
 """
-import argparse, csv, datetime as dt, io, json, os, re, shutil, subprocess, sys, tempfile, time
+import urllib.parse, argparse, csv, datetime as dt, io, json, os, re, shutil, subprocess, sys, tempfile, time
 import urllib.request, urllib.error
 from zoneinfo import ZoneInfo
 from decimal import Decimal, ROUND_HALF_UP
@@ -213,7 +213,41 @@ def cboe_index_close(sym, A):
         if q is not None:
             log(f'{sym}: history CSV lags (latest {best[0]}), using final quote close {q} for {A}')
             return (A, q)
+        # Cboe 的報價 JSON 也讀不到時（GitHub 主機常被擋 403），改用 Yahoo 的指數日線收盤價作備援
+        y = yahoo_index_close(sym, A, best[1])
+        if y is not None:
+            log(f'WARN {sym}: history CSV lags (latest {best[0]}); using Yahoo close {y} for {A} (not the Cboe file)')
+            return (A, y)
     return best
+
+
+YAHOO_INDEX = {'VIX': '^VIX', 'VIX9D': '^VIX9D', 'VIX3M': '^VIX3M', 'VIX6M': '^VIX6M'}
+
+
+def yahoo_index_close(sym, A, last_close):
+    """Yahoo daily close of index `sym` for US trading day A, or None. Sanity-checked against the last Cboe close."""
+    ysym = YAHOO_INDEX.get(sym)
+    if not ysym:
+        return None
+    try:
+        j = json.loads(http(f'https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(ysym)}?range=10d&interval=1d', tries=2))
+        res = j['chart']['result'][0]
+        closes = {}
+        for ts, c in zip(res['timestamp'], res['indicators']['quote'][0]['close']):
+            if c is not None:
+                closes[dt.datetime.fromtimestamp(ts, dt.timezone.utc).astimezone(ET).date()] = float(c)
+        c = closes.get(A)
+        if c is None:
+            log(f'WARN yahoo {ysym}: no bar for {A}')
+            return None
+        # 單日變動超過 60% 或超出合理範圍就不採用（避免拿到殘缺資料）
+        if not (5 <= c <= 200) or abs(c / last_close - 1) > 0.6:
+            log(f'WARN yahoo {ysym} {A} close {c} looks implausible vs last Cboe close {last_close}; ignored')
+            return None
+        return round(c, 2)
+    except Exception as e:  # noqa: BLE001
+        log(f'WARN yahoo {ysym} fallback unavailable: {e}')
+        return None
 
 
 def cboe_final_quote(sym, A):
