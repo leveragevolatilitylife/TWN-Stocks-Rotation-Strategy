@@ -51,12 +51,17 @@ def log(*a):
     print(*a, flush=True)
 
 
-def http(url, tries=3, timeout=45):
+def http(url, tries=3, timeout=45, nocache=False):
     last = None
     for i in range(tries):
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9'})
+            hdr = {'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9'}
+            if nocache:
+                hdr.update({'Cache-Control': 'no-cache', 'Pragma': 'no-cache'})
+            req = urllib.request.Request(url, headers=hdr)
             with urllib.request.urlopen(req, timeout=timeout) as r:
+                if nocache:
+                    log('GET', url.split('?')[0].rsplit('/', 1)[-1], 'Last-Modified:', r.headers.get('Last-Modified'), 'Age:', r.headers.get('Age'), 'X-Cache:', r.headers.get('X-Cache') or r.headers.get('CF-Cache-Status'))
                 return r.read().decode('utf-8-sig', 'replace')
         except Exception as e:  # noqa: BLE001
             last = e
@@ -192,7 +197,8 @@ def futures_for(A):
 
 
 def cboe_index_close(sym, A):
-    txt = http(f'https://cdn.cboe.com/api/global/us_indices/daily_prices/{sym}_History.csv')
+    # 加時間戳參數避開 CDN 快取：快取住舊版 CSV 時，會一直讀到少一天的資料
+    txt = http(f'https://cdn.cboe.com/api/global/us_indices/daily_prices/{sym}_History.csv?_={int(time.time())}', nocache=True)
     best = None
     for r in csv.DictReader(io.StringIO(txt)):
         d = dt.datetime.strptime(r['DATE'], '%m/%d/%Y').date()
