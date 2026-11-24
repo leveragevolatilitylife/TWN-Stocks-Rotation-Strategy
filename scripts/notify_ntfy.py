@@ -62,7 +62,7 @@ def send(title, body, priority):
     topic = os.environ.get('NTFY_TOPIC', '').strip()
     if not topic:
         raise SystemExit('NTFY_TOPIC is not set (add it as a GitHub Actions secret)')
-    server = os.environ.get('NTFY_SERVER', 'https://ntfy.sh').rstrip('/')
+    server = (os.environ.get('NTFY_SERVER') or 'https://ntfy.sh').strip().rstrip('/')   # 沒設 secret 時 workflow 會傳空字串，所以用 or 而不是 get 的預設值
     payload = {'topic': topic, 'title': title, 'message': body, 'priority': priority,
                'tags': ['chart_with_upwards_trend'], 'click': SITE}
     hdr = {'Content-Type': 'application/json'}
