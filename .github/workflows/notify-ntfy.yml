@@ -1,9 +1,8 @@
-# 每個台股交易日 09:20（台北）用 ntfy 推播五個策略的當日持倉。
+# 每個台股交易日 09:30（台北）用 ntfy 推播五個策略的當日持倉。
+# 觸發方式：由 cron-job.org 在週一到週五 09:30（Asia/Taipei）呼叫 workflow_dispatch（比 GitHub 內建排程準時）；台股休市日腳本會自行略過。
 # 需要在 repo 的 Settings → Secrets and variables → Actions 新增 secret：NTFY_TOPIC（你自己取的、別人猜不到的主題名稱）。
 name: notify-ntfy
 on:
-  schedule:
-    - cron: '20 1 * * 1-5'     # UTC 01:20 = 台北 09:20（週一到週五；台股休市日腳本會自行略過）
   workflow_dispatch:
     inputs:
       force:
