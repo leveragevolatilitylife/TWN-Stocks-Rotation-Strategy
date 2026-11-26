@@ -134,6 +134,9 @@ h2.section-title span.hint{font-weight:400;font-size:12px;color:var(--muted-2);}
 .strat-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;}
 .strat-card.on::before{background:var(--green);}
 .strat-card.off::before{background:var(--amber);}
+.strat-card.usd::before{background:var(--blue);}
+.strat-card .ticker.usd{color:var(--blue);}
+.test-tag{display:inline-block;vertical-align:middle;margin-left:6px;font-size:10px;font-weight:600;color:var(--amber);border:1px solid var(--amber);border-radius:3px;padding:0 5px;letter-spacing:.5px;}
 .strat-card .name{font-size:12.5px;color:var(--muted);margin-bottom:10px;min-height:32px;}
 .strat-card .ticker{font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;font-size:22px;font-weight:600;}
 .strat-card .ticker.on{color:var(--green);}
@@ -230,6 +233,7 @@ select.strat-select{
 .timeline-legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle;}
 .timeline-legend .dot.on{background:var(--green);}
 .timeline-legend .dot.off{background:var(--amber);}
+.timeline-legend .dot.usd{background:var(--blue);}
 .timeline-wrap{position:relative;margin-top:10px;}
 .timeline-row{display:flex;align-items:center;gap:10px;margin-bottom:5px;}
 .timeline-row-label{
@@ -272,9 +276,10 @@ table.hist thead th{
 table.hist thead th:first-child, table.hist td:first-child{text-align:left;}
 table.hist tbody td{padding:6px 10px;text-align:right;border-bottom:1px solid var(--line);}
 table.hist tbody td{color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.35);}
-table.hist tbody td.hold-on, table.hist tbody td.hold-off{text-align:center;}
+table.hist tbody td.hold-on, table.hist tbody td.hold-off, table.hist tbody td.hold-usd{text-align:center;}
 table.hist tbody td.hold-on{background:rgba(51,168,118,0.55);}
 table.hist tbody td.hold-off{background:rgba(217,164,65,0.55);}
+table.hist tbody td.hold-usd{background:rgba(91,141,239,0.55);}
 table.hist tbody tr:hover{background:var(--panel-2);}
 .badge{display:inline-block;padding:1px 6px;border-radius:2px;font-size:11px;}
 .badge.on{background:var(--green-dim);color:var(--green);}
@@ -327,7 +332,11 @@ footer p{margin:4px 0;}
      
 <section id="sec-strategy-logic">
   <h2 class="section-title">策略邏輯說明</h2>
-  <div class="logic-row logic-row-2">
+  <div class="logic-row logic-row-3">
+    <div class="logic-card">
+      <div class="name">MARS+VRS Hybrid III<span class="test-tag">測試中</span></div>
+      <div class="desc">以「MARS+VRS Hybrid」為基礎，加上<b>FED 週期防禦</b>：當 Hybrid 訊號為防禦段（00635U）時，若同時符合 ①<b>FED 處於升息期</b>（最近一次調整利率為升息，自 FOMC 決議日後的下一個台股交易日起生效），且 ②<b>美國 PCE 年增率</b>（已公布的最新值）<b>≥ 3%</b>，則再檢查<b>前一交易日 00635U 收盤價</b>是否高於其 <b>60 日均線</b>：高於均線續抱 00635U；<b>跌破均線則賣出 00635U、改持 00682U（美元指數 ETF）</b>，回到均線之上或 Hybrid 轉為 00631L 時換回。不符合上述條件時與 Hybrid 完全相同。<b class="upd">測試階段：規則與參數可能調整，詳見回測平台。</b></div>
+    </div>
     <div class="logic-card">
       <div class="name">MARS+VRS Hybrid</div>
       <div class="desc">同樣結合「MA Rotation II」與「VIX Rotation+BTD」，但採<b>共識制</b>：兩組訊號一致時才換倉；若兩者不同調，則沿用前一交易日的持倉不變 (<b>HOLD</b> 條件)。<b class="upd">【2026-11-21 改進】當「VIX Rotation+BTD」的 VX30:VIX Roll Yield 跌破近 1000 個交易日 PR0.5（極端恐慌低點）時，該日不再受 HOLD 限制，直接視為 00631L（抄底）並成為隔日 HOLD 的「前一日持倉」，隔日起恢復原本HOLD模式。</b>訊號較有延續性，平均交易頻率~54天/次。</div>
@@ -409,10 +418,11 @@ footer p{margin:4px 0;}
     </div>
     <div class="chart-box">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:10px;">
-        <div style="font-size:12px;color:var(--muted);">策略持倉時間軸（5 組策略並行）</div>
+        <div style="font-size:12px;color:var(--muted);">策略持倉時間軸（6 組策略並行）</div>
         <div class="timeline-legend">
           <span><i class="dot on"></i>00631L（正向操作）</span>
           <span><i class="dot off"></i>00635U（防禦／反向）</span>
+          <span><i class="dot usd"></i>00682U（Hybrid III 美元防禦）</span>
         </div>
       </div>
       <div class="timeline-wrap" id="timeline-wrap">
@@ -618,6 +628,7 @@ function newChart(canvasId, config){
 }
 
 function renderDashboard(DATA){
+  augmentHybrid3(DATA);
   destroyCharts();
   ['metric-grid','strat-grid','strat-gauges','table-head','table-body','timeline-rows'].forEach(id=>{
     const el = document.getElementById(id);
@@ -700,9 +711,9 @@ function renderDashboard(DATA){
   /* ---------- strategy signals: thermometer-style gauges ---------- */
   const stratGrid = document.getElementById('strat-grid');
   const gaugeBox = document.getElementById('strat-gauges');
-  const GC = {on:COLORS.green, off:COLORS.amber, hold:'#6f7686'};
+  const GC = {on:COLORS.green, off:COLORS.amber, hold:'#6f7686', usd:COLORS.blue};
   const SW = `<i style="background:${GC.on}"></i>`, SA = `<i style="background:${GC.off}"></i>`, SH = `<i style="background:${GC.hold}"></i>`;
-  const holdColor = h => h==='00631L' ? GC.on : (h ? GC.off : GC.hold);
+  const holdColor = h => h==='00631L' ? GC.on : h==='00682U' ? GC.usd : (h ? GC.off : GC.hold);
   const NSg = 'http://www.w3.org/2000/svg';
   function sEl(tag, attrs, text){ const e=document.createElementNS(NSg,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); if(text!=null) e.textContent=text; return e; }
   const gPolar = (cx,cy,r,f)=>{ const a=Math.PI*(1-f); return [cx+r*Math.cos(a), cy-r*Math.sin(a)]; };
@@ -710,7 +721,8 @@ function renderDashboard(DATA){
   // zones:[{to,color,label?}] 依序鋪滿 0→1；ticks:[{f,label}]；needle: 0~1 或 null
   let gaugeSeq=0;
   function buildGauge(o){
-    const svg = sEl('svg',{viewBox:'0 0 260 146','role':'img','aria-label':o.aria||''});
+    const hasZL = (o.zones||[]).some(z=>z.label);   // 兩側有區段文字（Hybrid 系列）時左右各留邊，三欄排版也不被裁切
+    const svg = sEl('svg',{viewBox:hasZL?'-28 0 316 146':'0 0 260 146','role':'img','aria-label':o.aria||''});
     const cx=130, cy=124, R=92, W=17;
     svg.appendChild(sEl('path',{d:gArc(cx,cy,R+W/2+4,0,1),fill:'none',stroke:'#202532','stroke-width':1}));
     let prev=0;
@@ -756,12 +768,19 @@ function renderDashboard(DATA){
   const holdOf = idx => latest.strat[idx] ? latest.strat[idx][0] : null;
   const hMA2 = holdOf(4), hVIX = holdOf(2);
 
-  const STRAT_SHOW = [1,0,2,3,4];   // 顯示順序：Hybrid 在 Hybrid II 前面（資料欄位順序不變）
+  const STRAT_SHOW = [5,1,0,2,3,4];   // 顯示順序：Hybrid III（測試中）、Hybrid、Hybrid II…（資料欄位順序不變，5＝程式推算的 Hybrid III）
   const G = [];   // 依顯示順序：[row, card]
   // MARS+VRS Hybrid II / Hybrid：兩個子訊號（MA Rotation II、VIX Rotation+BTD）中，幾個是 00631L
   const nOn = (hMA2==='00631L'?1:0) + (hVIX==='00631L'?1:0);
   const comboNeedle = (nOn+0.5)/3;
   const chips = `<div class="g-chips"><span class="g-chip">MA Rotation II <b style="color:${holdColor(hMA2)}">${hMA2||'–'}</b></span><span class="g-chip">VIX Rotation+BTD <b style="color:${holdColor(hVIX)}">${hVIX||'–'}</b></span></div>`;
+  const h3 = latest.h3, h3Hold = holdOf(5), h3Usd = h3Hold==='00682U';
+  const h3chips = `<div class="g-chips"><span class="g-chip">Hybrid <b style="color:${holdColor(holdOf(1))}">${holdOf(1)||'–'}</b></span><span class="g-chip">FED 防禦 <b style="color:${h3&&h3.defOn?GC.usd:GC.hold}">${!h3?'資料不足':(h3.defOn?'啟動':'未啟動')}</b></span></div>`;
+  const h3meta = !h3 ? '防禦資料載入失敗，暫與 Hybrid 相同' :
+    `FED ${h3.hike?'升息期':'非升息期'}・PCE <b>${h3.pce===null?'–':h3.pce.toFixed(2)+'%'}</b>（門檻 3%）` + (h3.defOn && h3.g!==null ? `<br>00635U 前收 <b>${h3.g.toFixed(2)}</b> ${h3.g>h3.ma?'>':'≤'} 60MA <b>${h3.ma.toFixed(2)}</b>` : '');
+  G.push({row:0, idx:5, svg: buildGauge({aria:'MARS+VRS Hybrid III', needle:comboNeedle, center:h3Hold||'–', centerColor:holdColor(h3Hold),
+      zones:[{to:1/3,color:GC.off,label:'皆 00635U'},{to:2/3,color:GC.hold,label:'維持前日'},{to:1,color:GC.on,label:'皆 00631L'}]}),
+      meta:h3meta, rule:'Hybrid 持 00635U 時，若 FED 升息期且 PCE≥3%，00635U 前日收盤跌破 60MA → 改持 00682U（美元）。<b class="upd">測試中</b>', extra:h3chips});
   G.push({row:0, idx:0, svg: buildGauge({aria:'MARS+VRS Hybrid II', needle:comboNeedle, center:holdOf(0)||'–', centerColor:holdColor(holdOf(0)),
       zones:[{to:1/3,color:GC.off,label:'皆 00635U'},{to:2/3,color:GC.on,label:'任一 00631L'},{to:1,color:GC.on,label:'皆 00631L'}]}),
       meta:`兩個子訊號中 <b>${nOn}</b> 個為 00631L`, rule:'OR 邏輯：任一為 00631L 即持 00631L，兩者皆 00635U 才持 00635U', extra:chips});
@@ -784,7 +803,7 @@ function renderDashboard(DATA){
   G.push({row:1, idx:4, svg: buildGauge({aria:'MA Rotation II', needle:openReady?biasF(latest.etf_bias_open):null, center:holdOf(4)||'–', centerColor:holdColor(holdOf(4)), zones:maZones, ticks:maTicks}),
       meta: openReady ? `0050 季線乖離（當日開盤）<b>${pctStr(latest.etf_bias_open)}</b>` : `0050 當日開盤價<b>尚未公布</b>（開盤後更新）`, rule:'乖離率介於 0%～20%（開盤價 > 60MA 且乖離 < 20%）→ 當日 00631L'});
 
-  [[0,'g2'],[1,'g3']].forEach(([rowNo,cls])=>{
+  [[0,'g3'],[1,'g3']].forEach(([rowNo,cls])=>{
     const rowEl = document.createElement('div'); rowEl.className = 'gauge-row '+cls;
     G.filter(g=>g.row===rowNo).sort((x,y)=>STRAT_SHOW.indexOf(x.idx)-STRAT_SHOW.indexOf(y.idx)).forEach(g=>{
       const card = document.createElement('div'); card.className='gauge-card';
@@ -805,10 +824,10 @@ function renderDashboard(DATA){
 
   // 經典卡片檢視
   STRAT_SHOW.forEach(idx=>{ const name=stratNames[idx];
-    const hold = latest.strat[idx] ? latest.strat[idx][0] : null, isOn = hold === '00631L';
+    const hold = latest.strat[idx] ? latest.strat[idx][0] : null, isOn = hold === '00631L', isUsd = hold === '00682U';
     const card = document.createElement('div');
-    card.className = 'strat-card ' + (hold ? (isOn?'on':'off') : '');
-    card.innerHTML = `<div class="name">${name}</div><div class="ticker ${isOn?'on':'off'}">${hold||'–'}</div><div class="streak">已連續 ${streakOf(idx)} 個交易日</div>`;
+    card.className = 'strat-card ' + (hold ? (isOn?'on':(isUsd?'usd':'off')) : '');
+    card.innerHTML = `<div class="name">${name}</div><div class="ticker ${isOn?'on':(isUsd?'usd':'off')}">${hold||'–'}</div><div class="streak">已連續 ${streakOf(idx)} 個交易日</div>`;
     stratGrid.appendChild(card);
   });
   // 儀表 / 卡片 切換（記住偏好；storage 不可用時回到預設）
@@ -1129,7 +1148,7 @@ function renderDashboard(DATA){
   let timelineT0 = 0, timelineSpan = 1;
   let timelineSvgs = [];
 
-  stratNames.forEach((name, idx)=>{
+  STRAT_SHOW.forEach(idx=>{ const name = stratNames[idx];
     const row = document.createElement('div');
     row.className = 'timeline-row';
     const label = document.createElement('div');
@@ -1163,7 +1182,8 @@ function renderDashboard(DATA){
     const n = data.length;
     const stepX = 1000 / n;
 
-    timelineSvgs.forEach((svg, stratIdx)=>{
+    timelineSvgs.forEach(svg=>{
+      const stratIdx = +svg.dataset.stratIdx;
       const bg = document.createElementNS(NS,'rect');
       bg.setAttribute('x',0); bg.setAttribute('y',0); bg.setAttribute('width',1000); bg.setAttribute('height',32);
       bg.setAttribute('fill', 'var(--panel-2)');
@@ -1192,7 +1212,7 @@ function renderDashboard(DATA){
         rect.setAttribute('height', 26);
         rect.setAttribute('class','seg');
         rect.setAttribute('shape-rendering','crispEdges');
-        rect.setAttribute('fill', seg.hold==='00631L' ? COLORS.green : COLORS.amber);
+        rect.setAttribute('fill', seg.hold==='00631L' ? COLORS.green : seg.hold==='00682U' ? COLORS.blue : COLORS.amber);
         rect.setAttribute('fill-opacity', seg.hold==='00631L' ? '0.85' : '0.8');
         svg.appendChild(rect);
       });
@@ -1254,7 +1274,7 @@ function renderDashboard(DATA){
     timelineCursor.style.left = px + 'px';
     timelineTooltip.style.opacity = 1;
     timelineTooltip.style.left = px + 'px';
-    const lines = stratNames.map((name,i)=>{
+    const lines = STRAT_SHOW.map(i=>{ const name = stratNames[i];
       const h = r.strat[i] ? r.strat[i][0] : null;
       return name + '：' + (h || '尚無資料');
     });
@@ -1339,7 +1359,7 @@ function renderDashboard(DATA){
         if(c.key==='date'){ html += `<td>${r.date}</td>`; return; }
         if(c.strat!==undefined){
           const h = r.strat && r.strat[c.strat] ? r.strat[c.strat][0] : null;
-          html += `<td class="${h ? (h==='00631L'?'hold-on':'hold-off') : ''}">${h || '–'}</td>`;
+          html += `<td class="${h ? (h==='00631L'?'hold-on':(h==='00682U'?'hold-usd':'hold-off')) : ''}">${h || '–'}</td>`;
           return;
         }
         const v = r[c.key];
@@ -1534,13 +1554,57 @@ async function loadOhlc(){
     OHLC = lines.map(l=>{ const [d,o,h,lo,c]=l.split(','); return {date:d, o:+o, h:+h, l:+lo, c:+c}; }).filter(r=>r.date && isFinite(r.o+r.h+r.l+r.c));
   }catch(e){ console.warn('0050 K 棒資料載入失敗，改用折線圖：', e); OHLC = []; }
 }
+/* ---- Hybrid III（測試中）：Hybrid + FED 升息期且 PCE≥3% 時，00635U 破 60MA → 00682U ----
+   規則與資料來源同回測平台：FED 決議／PCE 取自回測平台 repo 的 src/data（單一來源，自動更新），00635U 收盤取自 data/00635u_close.csv */
+const H3_BASE = 'https://raw.githubusercontent.com/leveragevolatilitylife/TWN-rotation-strategy-backtester/main/src/data/';
+let H3 = null;
+async function loadH3(){
+  try{
+    const [c, f, p] = await Promise.all([
+      fetch('data/00635u_close.csv', {cache:'no-cache'}).then(r=>{ if(!r.ok) throw new Error('00635u '+r.status); return r.text(); }),
+      fetch(H3_BASE+'fed_rates.json', {cache:'no-cache'}).then(r=>{ if(!r.ok) throw new Error('fed '+r.status); return r.json(); }),
+      fetch(H3_BASE+'us_pce.json', {cache:'no-cache'}).then(r=>{ if(!r.ok) throw new Error('pce '+r.status); return r.json(); }),
+    ]);
+    const px = c.trim().split(/\r?\n/).slice(1).map(l=>{ const [d,v]=l.split(','); return {d, c:+v}; }).filter(x=>x.d && isFinite(x.c) && x.c>0).sort((a,b)=>a.d<b.d?-1:1);
+    // FED 制度：最近一次調整的方向（決議日當天不算，下一個台股交易日起生效）
+    let mid = f.initialMid; const dec = f.decisions.map(([d,nm])=>{ const up = nm>mid; mid = nm; return {d, up}; });
+    H3 = {px, dec, pce: p.releases};
+  }catch(e){ console.warn('Hybrid III 資料載入失敗，退回與 Hybrid 相同：', e); H3 = null; }
+}
+function augmentHybrid3(D){
+  if(D.strategy_names.length > 5) return;
+  D.strategy_names.push('MARS+VRS Hybrid III [測試中]');
+  const px = H3 ? H3.px : [];
+  const lastLE = (arr, key, d, strict) => { let lo=0, hi=arr.length-1, ans=-1; while(lo<=hi){ const m=(lo+hi)>>1; const v=key(arr[m]); if(strict ? v<d : v<=d){ ans=m; lo=m+1; } else hi=m-1; } return ans; };
+  D.rows.forEach(r=>{
+    const base = r.strat[1] || [null,null];
+    let hold = base[0], info = null;
+    if(H3 && px.length>=60){
+      const hd = r.az_date || r.date;           // 持倉生效的台股交易日
+      const di = lastLE(H3.dec, x=>x.d, hd, true);
+      const hike = di>=0 && H3.dec[di].up;
+      const pi = lastLE(H3.pce, x=>x[0], hd, false);
+      const pce = pi>=0 ? H3.pce[pi][1] : null;
+      const pi0 = lastLE(px, x=>x.d, hd, true);   // 前一個有收盤價的交易日
+      let g = null, ma = null;
+      if(pi0>=59 && (Date.parse(hd)-Date.parse(px[pi0].d))/864e5 <= 7){
+        g = px[pi0].c; ma = px.slice(pi0-59, pi0+1).reduce((a,x)=>a+x.c,0)/60;
+      }
+      const defOn = hike && pce!==null && pce>=3;
+      info = {hike, pce, g, ma, defOn};
+      if(base[0]==='00635U' && defOn && g!==null && !(g>ma)) hold = '00682U';
+    }
+    r.h3 = info;
+    r.strat.push([hold, base[1]]);
+  });
+}
 (async function init(){
   try{
     // 'no-cache' forces a freshness check on every load (so updates are
     // never missed) but still lets the browser reuse the cached file body
     // via a 304 when it hasn't changed — much faster than 'no-store',
     // which would re-download the full file every single time.
-    const [res] = await Promise.all([fetch(DATA_URL, {cache:'no-cache'}), loadOhlc()]);
+    const [res] = await Promise.all([fetch(DATA_URL, {cache:'no-cache'}), loadOhlc(), loadH3()]);
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const buf = await res.arrayBuffer();
     const data = parseWorkbookBuffer(buf);
