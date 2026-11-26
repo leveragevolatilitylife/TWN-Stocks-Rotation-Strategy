@@ -134,8 +134,8 @@ h2.section-title span.hint{font-weight:400;font-size:12px;color:var(--muted-2);}
 .strat-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;}
 .strat-card.on::before{background:var(--green);}
 .strat-card.off::before{background:var(--amber);}
-.strat-card.usd::before{background:var(--blue);}
-.strat-card .ticker.usd{color:var(--blue);}
+.strat-card.usd::before{background:#F1A09A;}
+.strat-card .ticker.usd{color:#F1A09A;}
 .test-tag{display:inline-block;vertical-align:middle;margin-left:6px;font-size:10px;font-weight:600;color:var(--amber);border:1px solid var(--amber);border-radius:3px;padding:0 5px;letter-spacing:.5px;}
 .strat-card .name{font-size:12.5px;color:var(--muted);margin-bottom:10px;min-height:32px;}
 .strat-card .ticker{font-family:ui-monospace,'SF Mono','Cascadia Mono','Consolas','Menlo',monospace;font-size:22px;font-weight:600;}
@@ -233,7 +233,7 @@ select.strat-select{
 .timeline-legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle;}
 .timeline-legend .dot.on{background:var(--green);}
 .timeline-legend .dot.off{background:var(--amber);}
-.timeline-legend .dot.usd{background:var(--blue);}
+.timeline-legend .dot.usd{background:#F1A09A;}
 .timeline-wrap{position:relative;margin-top:10px;}
 .timeline-row{display:flex;align-items:center;gap:10px;margin-bottom:5px;}
 .timeline-row-label{
@@ -279,7 +279,7 @@ table.hist tbody td{color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.35);}
 table.hist tbody td.hold-on, table.hist tbody td.hold-off, table.hist tbody td.hold-usd{text-align:center;}
 table.hist tbody td.hold-on{background:rgba(51,168,118,0.55);}
 table.hist tbody td.hold-off{background:rgba(217,164,65,0.55);}
-table.hist tbody td.hold-usd{background:rgba(91,141,239,0.55);}
+table.hist tbody td.hold-usd{background:rgba(241,160,154,0.55);}
 table.hist tbody tr:hover{background:var(--panel-2);}
 .badge{display:inline-block;padding:1px 6px;border-radius:2px;font-size:11px;}
 .badge.on{background:var(--green-dim);color:var(--green);}
@@ -711,7 +711,7 @@ function renderDashboard(DATA){
   /* ---------- strategy signals: thermometer-style gauges ---------- */
   const stratGrid = document.getElementById('strat-grid');
   const gaugeBox = document.getElementById('strat-gauges');
-  const GC = {on:COLORS.green, off:COLORS.amber, hold:'#6f7686', usd:COLORS.blue};
+  const GC = {on:COLORS.green, off:COLORS.amber, hold:'#6f7686', usd:'#F1A09A'};
   const SW = `<i style="background:${GC.on}"></i>`, SA = `<i style="background:${GC.off}"></i>`, SH = `<i style="background:${GC.hold}"></i>`;
   const holdColor = h => h==='00631L' ? GC.on : h==='00682U' ? GC.usd : (h ? GC.off : GC.hold);
   const NSg = 'http://www.w3.org/2000/svg';
@@ -1212,7 +1212,7 @@ function renderDashboard(DATA){
         rect.setAttribute('height', 26);
         rect.setAttribute('class','seg');
         rect.setAttribute('shape-rendering','crispEdges');
-        rect.setAttribute('fill', seg.hold==='00631L' ? COLORS.green : seg.hold==='00682U' ? COLORS.blue : COLORS.amber);
+        rect.setAttribute('fill', seg.hold==='00631L' ? COLORS.green : seg.hold==='00682U' ? '#F1A09A' : COLORS.amber);
         rect.setAttribute('fill-opacity', seg.hold==='00631L' ? '0.85' : '0.8');
         svg.appendChild(rect);
       });
