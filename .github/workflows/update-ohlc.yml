@@ -43,10 +43,13 @@ jobs:
           MODE='${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'update' }}'
           if [ "$MODE" = "backfill" ]; then python3 scripts/ohlc_etf.py backfill
           elif [ "$MODE" = "update" ]; then python3 scripts/ohlc_etf.py update; fi
+      - name: sync FED / PCE / ETF columns into latest.xlsx
+        continue-on-error: true
+        run: python3 -I scripts/etf_cols.py sync data/latest.xlsx
       - name: commit
         run: |
           git config user.name github-actions; git config user.email actions@github.com
-          git add data/0050_ohlc.csv data/00635u_ohlc.csv data/00682u_ohlc.csv
+          git add data/0050_ohlc.csv data/00635u_ohlc.csv data/00682u_ohlc.csv data/latest.xlsx
           if git diff --cached --quiet; then echo "no change"; exit 0; fi
           git commit -q -m "更新 0050 / 00635U / 00682U K 棒資料 ($(TZ=Asia/Taipei date +%F))"
           for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break || sleep 5; done

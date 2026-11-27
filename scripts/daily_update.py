@@ -19,6 +19,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import daily_row  # noqa: E402
+import etf_cols  # noqa: E402
 import openpyxl  # noqa: E402
 
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
@@ -437,6 +438,14 @@ def check_recalculated(path, expect):
 
 
 # ---------------------------------------------------------------- modes
+def etf_sync(path):
+    """FED / PCE / 00635U / 00682U 欄位（BQ:BZ）：盡力而為，失敗只記警告，不影響主流程"""
+    try:
+        etf_cols.sync(path)
+    except Exception as e:  # noqa: BLE001
+        log('WARN etf_cols sync skipped:', e)
+
+
 def mode_close(a, today):
     today = row_day(today)
     kind = tw_day_kind(today)
@@ -502,6 +511,7 @@ def mode_close(a, today):
     tmp = str(Path(a.file).with_suffix('.new.xlsx'))
     sets = [f'{k}={vals[k]}' for k in vals]
     daily_row.cmd_insert(SimpleNamespace(src=a.file, dst=tmp, a=A.isoformat(), az=today.isoformat(), holiday=hol, set=sets))
+    etf_sync(tmp)
     recalc(tmp)
     expect = {'A5': A, 'AZ5': today, 'BB5': bb, 'K5': float(K)}
     expect.update({f'{k}5': float(v) for k, v in vals.items() if k not in ('K', 'BB')})
@@ -538,6 +548,7 @@ def mode_open(a, today):
         raise Fail(f'open {o} deviates >{TW_LIMIT:.1%} from previous close {bb}')
     tmp = str(Path(a.file).with_suffix('.new.xlsx'))
     daily_row.cmd_set(SimpleNamespace(src=a.file, dst=tmp, expect_az=today.isoformat(), set=[f'BA={o}']))
+    etf_sync(tmp)
     recalc(tmp)
     check_recalculated(tmp, {'AZ5': today, 'BA5': o})
     if not a.dry_run:
