@@ -43,7 +43,7 @@ def load_h3():
         mid, dec = f['initialMid'], []
         for d, nm in f['decisions']:
             dec.append((d, nm > mid)); mid = nm
-        with open(ROOT / 'data' / '00635u_close.csv', newline='', encoding='utf-8') as fh:
+        with open(ROOT / 'data' / '00635u_ohlc.csv', newline='', encoding='utf-8') as fh:
             px = sorted((r['date'], float(r['close'])) for r in csv.DictReader(fh))
         return {'dec': dec, 'pce': [(d, v) for d, v in p['releases']], 'px': px}
     except Exception as e:  # noqa: BLE001

@@ -412,7 +412,14 @@ footer p{margin:4px 0;}
       <div class="chart-inner"><canvas id="chart-rollyield"></canvas></div>
     </div>
     <div class="chart-box">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">0050 60MA &amp; BIAS</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+        <div style="font-size:12px;color:var(--muted);" id="etf-panel-title">0050 60MA &amp; BIAS</div>
+        <div class="view-toggle" id="etf-sym-toggle" role="group" aria-label="切換標的">
+          <button type="button" data-sym="0050" class="active">0050</button>
+          <button type="button" data-sym="00635U">00635U</button>
+          <button type="button" data-sym="00682U">00682U</button>
+        </div>
+      </div>
       <div class="chart-inner" style="height:320px"><canvas id="chart-etfma"></canvas></div>
       <div class="chart-inner" style="height:150px;margin-top:6px"><canvas id="chart-etfbias"></canvas></div>
     </div>
@@ -1401,7 +1408,9 @@ function renderDashboard(DATA){
   };
 
   /* ---------- date-range controls (drive charts + table together) ---------- */
+  let etfSym = '0050', lastRange = null;   // 「60MA & BIAS」面板目前顯示的標的／日期區間
   function applyRange(fromStr, toStr){
+    lastRange = [fromStr, toStr];
     const data = sliceByDateRange(fromStr, toStr);
     const labels = data.map(r=>r.date);
 
@@ -1447,16 +1456,46 @@ function renderDashboard(DATA){
     // 60MA 與乖離率以「台股交易日」(AZ) 定位，才能與 K 棒、下方乖離率對齊
     const taiwanDay = r=>r.az_date||r.date;
     const lo = fromStr||data[0].date, hi = toStr||data[data.length-1].date;
-    const candles = OHLC_ADJ.filter(k=>k.date>=lo && k.date<=taiwanDay(data[data.length-1]));
-    const useCandle = candles.length>0;
-    const d0 = chartEtfMa.data.datasets[0];
-    if(useCandle){
-      d0.candle = true; d0.label = '0050 日K（綠漲／紅跌）';
+    const hiDay = taiwanDay(data[data.length-1]);
+    const d0 = chartEtfMa.data.datasets[0], d1 = chartEtfMa.data.datasets[1];
+    const setCandles = (list, label, title)=>{
+      d0.candle = true; d0.label = label;
       d0.borderColor = d0.backgroundColor = 'transparent'; d0.borderWidth = 0;
-      d0.data = candles.map(k=>({x:k.date, y:k.c, t:new Date(k.date).getTime(), o:k.o, h:k.h, l:k.l, c:k.c}));
-      chartEtfMa.data.datasets[2].data = candles.map(k=>({x:k.date,y:k.h}));
-      chartEtfMa.data.datasets[3].data = candles.map(k=>({x:k.date,y:k.l}));
-      chartEtfMa.options.plugins.title.text = '0050 日K & 60MA';
+      d0.data = list.map(k=>({x:k.date, y:k.c, t:new Date(k.date).getTime(), o:k.o, h:k.h, l:k.l, c:k.c}));
+      chartEtfMa.data.datasets[2].data = list.map(k=>({x:k.date,y:k.h}));
+      chartEtfMa.data.datasets[3].data = list.map(k=>({x:k.date,y:k.l}));
+      chartEtfMa.options.plugins.title.text = title;
+    };
+    const sel = etfSym;
+    document.getElementById('etf-panel-title').textContent = sel==='0050' ? '0050 60MA & BIAS' : `${sel} 60MA & BIAS（Hybrid III 監控標的）`;
+    [...document.querySelectorAll('#etf-sym-toggle button')].forEach(b=>b.classList.toggle('active', b.dataset.sym===sel));
+    if(sel!=='0050'){
+      // 00635U / 00682U：標準 60 日均線（含當日收盤）；乖離率 = 收盤 ÷ 60MA − 1。
+      // 當日收盤 > 當日 60MA，即為 Hybrid III 隔日不啟動 00682U 防禦的條件
+      const all = OHLC_ETF[sel] || [];
+      const ma = new Map(), bias = new Map();
+      let sum = 0;
+      all.forEach((k,i)=>{ sum += k.c; if(i>=60) sum -= all[i-60].c; if(i>=59){ const m = sum/60; ma.set(k.date, m); bias.set(k.date, k.c/m-1); } });
+      const list = all.filter(k=>k.date>=lo && k.date<=hiDay);
+      if(list.length){
+        setCandles(list, `${sel} 日K（綠漲／紅跌）`, `${sel} 日K & 60MA`);
+      } else {
+        d0.candle = false; d0.data = []; chartEtfMa.data.datasets[2].data = []; chartEtfMa.data.datasets[3].data = [];
+        chartEtfMa.options.plugins.title.text = `${sel}：此區間尚無資料（排程補齊中）`;
+      }
+      d1.label = `${sel} 60MA（收盤價 60 日均線）`;
+      d1.data = list.filter(k=>ma.has(k.date)).map(k=>({x:k.date, y:ma.get(k.date)}));
+      chartEtfMa.update();
+      chartEtfBias.data.datasets[0].label = `${sel} 60MA 乖離（收盤）`;
+      chartEtfBias.data.datasets[0].data = list.filter(k=>bias.has(k.date)).map(k=>({x:k.date, y:bias.get(k.date)}));
+      chartEtfBias.options.plugins.title.text = `${sel} 60MA 乖離率（%，收盤價）`;
+      chartEtfBias.update();
+    } else {
+    const candles = OHLC_ADJ.filter(k=>k.date>=lo && k.date<=hiDay);
+    const useCandle = candles.length>0;
+    d1.label = '0050 60MA（基於當日開盤）';
+    if(useCandle){
+      setCandles(candles, '0050 日K（綠漲／紅跌）', '0050 日K & 60MA');
     } else {
       d0.candle = false; d0.label = '0050 close price (N-1)';
       d0.borderColor = d0.backgroundColor = COLORS.blue; d0.borderWidth = 1.4;
@@ -1464,12 +1503,15 @@ function renderDashboard(DATA){
       chartEtfMa.data.datasets[2].data = []; chartEtfMa.data.datasets[3].data = [];
       chartEtfMa.options.plugins.title.text = '0050 收盤價 & 60MA';
     }
-    chartEtfMa.data.datasets[1].data = data.map(r=>({x:taiwanDay(r),y:r.etf_ma60_open}));
+    d1.data = data.map(r=>({x:taiwanDay(r),y:r.etf_ma60_open}));
     chartEtfMa.update();
 
     chartEtfBias.data.labels = labels;
+    chartEtfBias.data.datasets[0].label = '0050季線乖離（基於當日開盤）';
     chartEtfBias.data.datasets[0].data = data.map(r=>({x:taiwanDay(r),y:r.etf_bias_open}));
+    chartEtfBias.options.plugins.title.text = '0050 季線乖離率（%）';
     chartEtfBias.update();
+    }
 
     renderTimeline(data);
     setTableSource(data.slice().reverse());
@@ -1502,6 +1544,11 @@ function renderDashboard(DATA){
     fromInput.value = from;
     toInput.value = maxDate;
     applyRange(from, maxDate);
+  };
+
+  document.getElementById('etf-sym-toggle').onclick = e=>{
+    const b = e.target.closest('button'); if(!b || !lastRange) return;
+    etfSym = b.dataset.sym; applyRange(lastRange[0], lastRange[1]);
   };
 
   // initial render defaults to the last 1 year — the full 20+ years of
@@ -1546,6 +1593,17 @@ function showLoadError(msg){
    visitor sees the same, currently-published data ---------- */
 const DATA_URL = 'data/latest.xlsx';
 let OHLC = [];   // 0050 日 K：[{date:'YYYY-MM-DD', o,h,l,c}]，來自 data/0050_ohlc.csv（缺檔時退回折線圖）
+let OHLC_ETF = {'00635U':[], '00682U':[]};   // Hybrid III 監控的兩檔 ETF 日 K（未還原原始價），供「ETF 60MA & BIAS」面板切換
+async function loadEtfOhlc(){
+  await Promise.all(Object.keys(OHLC_ETF).map(async sym=>{
+    try{
+      const res = await fetch(`data/${sym.toLowerCase()}_ohlc.csv`, {cache:'no-cache'});
+      if(!res.ok) throw new Error(res.status);
+      OHLC_ETF[sym] = (await res.text()).trim().split(/\r?\n/).slice(1).map(l=>{ const [d,o,h,lo,c]=l.split(','); return {date:d, o:+o, h:+h, l:+lo, c:+c}; })
+        .filter(r=>r.date && isFinite(r.o+r.h+r.l+r.c) && r.c>0).sort((a,b)=>a.date<b.date?-1:1);
+    }catch(e){ console.warn(sym+' K 棒資料載入失敗：', e); OHLC_ETF[sym] = []; }
+  }));
+}
 async function loadOhlc(){
   try{
     const res = await fetch('data/0050_ohlc.csv', {cache:'no-cache'});
@@ -1555,17 +1613,17 @@ async function loadOhlc(){
   }catch(e){ console.warn('0050 K 棒資料載入失敗，改用折線圖：', e); OHLC = []; }
 }
 /* ---- Hybrid III（測試中）：Hybrid + FED 升息期且 PCE≥3% 時，00635U 破 60MA → 00682U ----
-   規則與資料來源同回測平台：FED 決議／PCE 取自回測平台 repo 的 src/data（單一來源，自動更新），00635U 收盤取自 data/00635u_close.csv */
+   規則與資料來源同回測平台：FED 決議／PCE 取自回測平台 repo 的 src/data（單一來源，自動更新），00635U 收盤取自 data/00635u_ohlc.csv */
 const H3_BASE = 'https://raw.githubusercontent.com/leveragevolatilitylife/TWN-rotation-strategy-backtester/main/src/data/';
 let H3 = null;
 async function loadH3(){
   try{
     const [c, f, p] = await Promise.all([
-      fetch('data/00635u_close.csv', {cache:'no-cache'}).then(r=>{ if(!r.ok) throw new Error('00635u '+r.status); return r.text(); }),
+      fetch('data/00635u_ohlc.csv', {cache:'no-cache'}).then(r=>{ if(!r.ok) throw new Error('00635u '+r.status); return r.text(); }),
       fetch(H3_BASE+'fed_rates.json', {cache:'no-cache'}).then(r=>{ if(!r.ok) throw new Error('fed '+r.status); return r.json(); }),
       fetch(H3_BASE+'us_pce.json', {cache:'no-cache'}).then(r=>{ if(!r.ok) throw new Error('pce '+r.status); return r.json(); }),
     ]);
-    const px = c.trim().split(/\r?\n/).slice(1).map(l=>{ const [d,v]=l.split(','); return {d, c:+v}; }).filter(x=>x.d && isFinite(x.c) && x.c>0).sort((a,b)=>a.d<b.d?-1:1);
+    const px = c.trim().split(/\r?\n/).slice(1).map(l=>{ const a=l.split(','); return {d:a[0], c:+a[4]}; }).filter(x=>x.d && isFinite(x.c) && x.c>0).sort((a,b)=>a.d<b.d?-1:1);
     // FED 制度：最近一次調整的方向（決議日當天不算，下一個台股交易日起生效）
     let mid = f.initialMid; const dec = f.decisions.map(([d,nm])=>{ const up = nm>mid; mid = nm; return {d, up}; });
     H3 = {px, dec, pce: p.releases};
@@ -1604,7 +1662,7 @@ function augmentHybrid3(D){
     // never missed) but still lets the browser reuse the cached file body
     // via a 304 when it hasn't changed — much faster than 'no-store',
     // which would re-download the full file every single time.
-    const [res] = await Promise.all([fetch(DATA_URL, {cache:'no-cache'}), loadOhlc(), loadH3()]);
+    const [res] = await Promise.all([fetch(DATA_URL, {cache:'no-cache'}), loadOhlc(), loadEtfOhlc(), loadH3()]);
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const buf = await res.arrayBuffer();
     const data = parseWorkbookBuffer(buf);

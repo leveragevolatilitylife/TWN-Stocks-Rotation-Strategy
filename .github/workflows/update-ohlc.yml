@@ -37,16 +37,16 @@ jobs:
           if [ "$MODE" = "backfill" ]; then python3 scripts/ohlc_0050.py backfill --start "$START"; python3 scripts/ohlc_0050.py validate
           elif [ "$MODE" = "validate" ]; then python3 scripts/ohlc_0050.py validate
           else python3 scripts/ohlc_0050.py update; fi
-      - name: fetch 00635U close (Hybrid III)
+      - name: fetch 00635U / 00682U OHLC
         continue-on-error: true
         run: |
           MODE='${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'update' }}'
-          if [ "$MODE" = "backfill" ]; then python3 scripts/close_00635u.py backfill --start 2025-01
-          elif [ "$MODE" = "update" ]; then python3 scripts/close_00635u.py update; fi
+          if [ "$MODE" = "backfill" ]; then python3 scripts/ohlc_etf.py backfill
+          elif [ "$MODE" = "update" ]; then python3 scripts/ohlc_etf.py update; fi
       - name: commit
         run: |
           git config user.name github-actions; git config user.email actions@github.com
-          git add data/0050_ohlc.csv data/00635u_close.csv
+          git add data/0050_ohlc.csv data/00635u_ohlc.csv data/00682u_ohlc.csv
           if git diff --cached --quiet; then echo "no change"; exit 0; fi
-          git commit -q -m "更新 0050 K 棒與 00635U 收盤資料 ($(TZ=Asia/Taipei date +%F))"
+          git commit -q -m "更新 0050 / 00635U / 00682U K 棒資料 ($(TZ=Asia/Taipei date +%F))"
           for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break || sleep 5; done
