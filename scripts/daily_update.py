@@ -215,7 +215,7 @@ def cboe_index_close(sym, A):
             best = (d, float(r['CLOSE']))
     if best is None:
         raise Fail(f'{sym}: no history row')
-    if best[0] < A:
+    if best[0] < A and not nyse_holiday(A):   # 美股休市日本來就沒有當天收盤，直接用前一個交易日（不可套用 Yahoo 備援，否則可能混入不同日期的值）
         # Cboe's *_History.csv is published with a delay (VIX itself can lag the other indices by hours).
         # Fall back to the delayed-quote JSON, which holds the final close once the market is closed.
         q = cboe_final_quote(sym, A)
