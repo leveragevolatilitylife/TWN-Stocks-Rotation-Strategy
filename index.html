@@ -775,7 +775,7 @@ function renderDashboard(DATA){
   const comboNeedle = (nOn+0.5)/3;
   const chips = `<div class="g-chips"><span class="g-chip">MA Rotation II <b style="color:${holdColor(hMA2)}">${hMA2||'–'}</b></span><span class="g-chip">VIX Rotation+BTD <b style="color:${holdColor(hVIX)}">${hVIX||'–'}</b></span></div>`;
   const h3 = latest.h3, h3Hold = holdOf(5), h3Usd = h3Hold==='00682U';
-  const h3chips = `<div class="g-chips"><span class="g-chip">Hybrid <b style="color:${holdColor(holdOf(1))}">${holdOf(1)||'–'}</b></span><span class="g-chip">FED 防禦 <b style="color:${h3&&h3.defOn?GC.usd:GC.hold}">${!h3?'資料不足':(h3.defOn?'啟動':'未啟動')}</b></span></div>`;
+  const h3chips = `<div class="g-chips"><span class="g-chip">Hybrid <b style="color:${holdColor(holdOf(1))}">${holdOf(1)||'–'}</b></span><span class="g-chip">升息週期/高通膨防禦 <b style="color:${h3&&h3.defOn?GC.usd:GC.hold}">${!h3?'資料不足':(h3.defOn?'啟動':'未啟動')}</b></span></div>`;
   const h3meta = !h3 ? '防禦資料載入失敗，暫與 Hybrid 相同' :
     `FED ${h3.hike?'升息期':'非升息期'}・PCE <b>${h3.pce===null?'–':h3.pce.toFixed(2)+'%'}</b>（門檻 3%）` + (h3.defOn && h3.g!==null ? `<br>00635U 前收 <b>${h3.g.toFixed(2)}</b> ${h3.g>h3.ma?'>':'≤'} 60MA <b>${h3.ma.toFixed(2)}</b>` : '');
   G.push({row:0, idx:5, svg: buildGauge({aria:'MARS+VRS Hybrid III', needle:comboNeedle, center:h3Hold||'–', centerColor:holdColor(h3Hold),
