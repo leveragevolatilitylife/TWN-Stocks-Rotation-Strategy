@@ -735,7 +735,7 @@ function renderDashboard(DATA){
       const riskF = n ? Math.min(1, 0.2 + 0.15*steps + 0.05*(n-1)) : 0;
       const mv = `${cur.step>0?'▲':'▼'}${Math.abs(cur.step)} 碼`;
       macroCard('FED 利率（目標區間中點）', cur.mid.toFixed(3)+'%', cur.up?'up':'down', cur.up?'risk-up':'risk-down', riskF,
-        `最近調整 ${cur.d}（${mv}）<br>` + (n ? `連續升息 ${n} 次・累計 ${steps} 碼` : '目前非連續升息'));
+        `<div>最近調整　${cur.d}　<b style="color:var(--text)">${mv}</b></div><div>連續升息　` + (n ? `${n} 次　累計 <b style="color:var(--text)">${steps}</b> 碼` : '無（非升息期）') + `</div>`);
     }
     // PCE：2% 為中間風險（黃），≥3% 最高風險（紅）；低於 2% 風險遞減，1% 以下最低
     const pi = lastLE2(H3.pce, x=>x[0], asOf, false);
