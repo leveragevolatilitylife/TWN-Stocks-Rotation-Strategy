@@ -715,6 +715,38 @@ function renderDashboard(DATA){
     grid.appendChild(card);
   });
 
+  /* ---------- 總經風險卡：FED 利率、美國 PCE（資料同 Hybrid III，取自回測平台 repo）---------- */
+  if(H3){
+    const asOf = latest.az_date || latest.date;
+    const lastLE2 = (arr, key, d, strict) => { let ans=-1; for(let i=0;i<arr.length;i++){ const v=key(arr[i]); if(strict ? v<d : v<=d) ans=i; else break; } return ans; };
+    const macroCard = (label, value, dirClass, riskClass, riskF, meta)=>{
+      const card = document.createElement('div');
+      card.className = 'metric-card';
+      card.style.cssText = riskBg(1-riskF, 'higher');   // riskF：0＝最低風險（綠）～1＝最高風險（紅），色階與 VIX 數據一致
+      card.innerHTML = `<div class="label">${label}</div><div class="value ${dirClass} ${riskClass}">${value}</div><div class="meta">${meta}</div>`;
+      grid.appendChild(card);
+    };
+    // FED：看「連續升息」與累計升息碼數（1 碼 = 0.25%）。目前不在連續升息中＝最低風險；連續升息的累計碼數越多風險越高（≥6 碼最高）
+    const di = lastLE2(H3.dec, x=>x.d, asOf, true);
+    if(di>=0){
+      const cur = H3.dec[di];
+      let n = 0, steps = 0;
+      if(cur.up){ for(let i=di; i>=0 && H3.dec[i].up; i--){ n++; steps += H3.dec[i].step; } }
+      const riskF = n ? Math.min(1, 0.2 + 0.15*steps + 0.05*(n-1)) : 0;
+      const mv = `${cur.step>0?'▲':'▼'}${Math.abs(cur.step)} 碼`;
+      macroCard('FED 利率（目標區間中點）', cur.mid.toFixed(3)+'%', cur.up?'up':'down', cur.up?'risk-up':'risk-down', riskF,
+        `最近調整 ${cur.d}（${mv}）<br>` + (n ? `連續升息 ${n} 次・累計 ${steps} 碼` : '目前非連續升息'));
+    }
+    // PCE：2% 為中間風險（黃），≥3% 最高風險（紅）；低於 2% 風險遞減，1% 以下最低
+    const pi = lastLE2(H3.pce, x=>x[0], asOf, false);
+    if(pi>=0){
+      const v = H3.pce[pi][1], pv = pi>0 ? H3.pce[pi-1][1] : null;
+      const riskF = v>=2 ? Math.min(1, 0.5 + 0.5*(v-2)) : Math.max(0, 0.5*(v-1));
+      macroCard('美國 PCE 年增率', v.toFixed(2)+'%', pv===null||v===pv ? '' : (v>pv?'up':'down'), pv===null||v===pv ? '' : (v>pv?'risk-up':'risk-down'), riskF,
+        `公布 ${H3.pce[pi][0]}${pv!==null?"・前值 "+pv.toFixed(2)+"%":""}`);
+    }
+  }
+
   /* ---------- strategy signals: thermometer-style gauges ---------- */
   const stratGrid = document.getElementById('strat-grid');
   const gaugeBox = document.getElementById('strat-gauges');
@@ -1625,7 +1657,7 @@ async function loadH3(){
     ]);
     const px = c.trim().split(/\r?\n/).slice(1).map(l=>{ const a=l.split(','); return {d:a[0], c:+a[4]}; }).filter(x=>x.d && isFinite(x.c) && x.c>0).sort((a,b)=>a.d<b.d?-1:1);
     // FED 制度：最近一次調整的方向（決議日當天不算，下一個台股交易日起生效）
-    let mid = f.initialMid; const dec = f.decisions.map(([d,nm])=>{ const up = nm>mid; mid = nm; return {d, up}; });
+    let mid = f.initialMid; const dec = f.decisions.map(([d,nm])=>{ const step = Math.round((nm-mid)/0.25*100)/100, up = nm>mid; mid = nm; return {d, up, step, mid: nm}; });
     H3 = {px, dec, pce: p.releases};
   }catch(e){ console.warn('Hybrid III 資料載入失敗，退回與 Hybrid 相同：', e); H3 = null; }
 }
