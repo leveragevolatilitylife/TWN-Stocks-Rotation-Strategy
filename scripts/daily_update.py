@@ -159,8 +159,8 @@ def nyse_holiday(d):
 
 
 # ---------------------------------------------------------------- data sources
-def cboe_settlement(d):
-    txt = http(f'https://www.cboe.com/us/futures/market_statistics/settlement/csv?dt={d.isoformat()}')
+def cboe_settlement(d, tries=3, timeout=45):
+    txt = http(f'https://www.cboe.com/us/futures/market_statistics/settlement/csv?dt={d.isoformat()}', tries=tries, timeout=timeout)
     rows = list(csv.DictReader(io.StringIO(txt)))
     out = []
     for r in rows:
@@ -174,7 +174,16 @@ def futures_for(A):
     """-> (M1..M7 settlement list (3dp), M1 expiry, is_us_holiday)"""
     hol = False
     d = A
-    rows = cboe_settlement(d)
+    if nyse_holiday(A):
+        # 美股休市日 Cboe 沒有結算檔，請求常常不是回空檔而是一直 timeout（2026-11-26 感恩節 daily-update 因此失敗）。
+        # 休市日只試一次、短 timeout；讀不到就當作沒有檔案，改用前一個交易日的結算價。
+        try:
+            rows = cboe_settlement(d, tries=1, timeout=20)
+        except Fail as e:
+            log(f'{A} is a NYSE holiday and the Cboe request failed ({e}); treating as no settlement file')
+            rows = []
+    else:
+        rows = cboe_settlement(d)
     tries = 0
     if not rows:
         if not nyse_holiday(A):
