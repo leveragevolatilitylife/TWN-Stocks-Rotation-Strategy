@@ -1,0 +1,15 @@
+GET VIX9D_History.csv Last-Modified: Fri, 27 Nov 2026 22:30:58 GMT Age: 316 X-Cache: Miss from cloudfront
+GET VIX_History.csv Last-Modified: Fri, 27 Nov 2026 11:30:40 GMT Age: 763 X-Cache: Miss from cloudfront
+WARN VIX quote fallback unavailable: fetch failed https://cdn.cboe.com/api/global/delayed_quotes/quotes/_VIX.json: HTTP Error 403: Forbidden
+WARN VIX: history CSV lags (latest 2026-11-26); using Yahoo close 23.81 for 2026-11-27 (not the Cboe file)
+GET VIX3M_History.csv Last-Modified: Fri, 27 Nov 2026 22:30:58 GMT Age: 422 X-Cache: Miss from cloudfront
+GET VIX6M_History.csv Last-Modified: Fri, 27 Nov 2026 22:30:58 GMT Age: None X-Cache: Miss from cloudfront
+GET VIX1Y_History.csv Last-Modified: Fri, 27 Nov 2026 22:30:58 GMT Age: None X-Cache: Miss from cloudfront
+0050 previous close 92.4 on 2026-11-27
+A=2026-11-27 az=2026-11-30 holiday=False K=18 {'B': 22.84, 'C': 22.786, 'D': 22.815, 'E': 22.691, 'F': 22.737, 'G': 22.7, 'H': 22.702, 'M': 24.1, 'N': 23.81, 'O': 23.82, 'P': 25.02, 'Q': 24.9, 'K': 18, 'BB': 92.4}
+inserted row 5: 2026-11-27 / 2026-11-30  {'B': '22.84', 'C': '22.786', 'D': '22.815', 'E': '22.691', 'F': '22.737', 'G': '22.7', 'H': '22.702', 'M': '24.1', 'N': '23.81', 'O': '23.82', 'P': '25.02', 'Q': '24.9', 'K': '18', 'BB': '92.4'}
+etf_cols: 5702 rows synced; newest row 5 az=2026-11-30 -> BQ=3.875, BR=3.84, BS=None, BT=37.4, BU=42.1885, BV=-0.11350249475567985, BW=None, BX=21.47, BY=20.9455, BZ=0.025041178296054033
+recalc ok: 4 known bottom errors; signals AK5=00635U AM5=00635U AO5=00635U AQ5=00635U AS5=00635U
+open step skipped: Taiwan market closed today
+audit skipped: audit not due
+DONE: inserted 2026-11-27/2026-11-30
