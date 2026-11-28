@@ -731,13 +731,13 @@ function renderDashboard(DATA){
       card.innerHTML = `<div class="label">${label}</div><div class="value ${dirClass} ${riskClass}">${value}</div><div class="meta">${meta.map(([k,v])=>`<div class="mr"><span>${k}</span><b>${v}</b></div>`).join('')}</div>`;
       grid.appendChild(card);
     };
-    // FED：看「連續升息」與累計升息碼數（1 碼 = 0.25%）。目前不在連續升息中＝最低風險；連續升息的累計碼數越多風險越高（≥6 碼最高）
+    // FED：看「連續升息」與累計升息碼數（1 碼 = 0.25%）。非升息期＝綠；進入升息週期（第 1 次升息）＝黃；連續升息＝紅區，累計碼數越多越紅（≥6 碼最高風險）
     const di = lastLE2(H3.dec, x=>x.d, asOf, true);
     if(di>=0){
       const cur = H3.dec[di];
       let n = 0, steps = 0;
       if(cur.up){ for(let i=di; i>=0 && H3.dec[i].up; i--){ n++; steps += H3.dec[i].step; } }
-      const riskF = n ? Math.min(1, 0.2 + 0.15*steps + 0.05*(n-1)) : 0;
+      const riskF = !n ? 0 : (n===1 ? Math.min(0.55, 0.5 + 0.025*(steps-1)) : 0.6 + 0.4*Math.min(1, steps/6));
       const mv = `${cur.step>0?'▲':'▼'}${Math.abs(cur.step)} 碼`;
       macroCard('FED 利率（目標區間中點）', cur.mid.toFixed(3)+'%', cur.up?'up':'down', cur.up?'risk-up':'risk-down', riskF,
         [['最近調整', `${cur.d.slice(2)}（${mv}）`], ['連續升息', n ? `${n} 次・累計 ${steps} 碼` : '無（非升息期）']]);
